@@ -50,12 +50,13 @@ export default function LoginPage() {
     setSubmitting(false)
   }
 
+  /* 16px on touch widths: WebKit zooms into focused inputs below 16px */
   const inputBase =
-    "mt-2 w-full rounded-lg border bg-surface px-3.5 py-2.5 text-[15px] text-ink placeholder:text-mute outline-none transition-[border-color,box-shadow] duration-200 ease-quiet"
+    "mt-2 w-full rounded-lg border bg-surface px-3.5 py-2.5 text-[16px] lg:text-[15px] text-ink placeholder:text-mute outline-none transition-[border-color,box-shadow] duration-200 ease-quiet"
   const inputOk =
-    "border-line hover:border-mute/40 focus:border-brand-deep focus:shadow-[0_0_0_3px_rgba(47,193,43,0.13)]"
+    "border-line-strong hover:border-mute focus:border-brand-deep focus:shadow-[0_0_0_2px_rgba(30,125,27,0.8)]"
   const inputBad =
-    "border-claret/60 focus:border-claret focus:shadow-[0_0_0_3px_rgba(179,57,47,0.10)]"
+    "border-claret/60 focus:border-claret focus:shadow-[0_0_0_2px_rgba(179,57,47,0.8)]"
 
   return (
     <main className="relative min-h-[100dvh] lg:grid lg:grid-cols-[1.05fr_1fr]">
@@ -98,12 +99,12 @@ export default function LoginPage() {
           >
             Manager console
           </p>
-          <h1
+          <p
             className="anim-rise mt-4 pb-1 font-serif text-[2.75rem] font-normal leading-[1.15] tracking-[-0.02em] text-ink"
             style={{ "--index": 2 } as CSSProperties}
           >
             Run every branch from <em className="italic">one place.</em>
-          </h1>
+          </p>
           <p
             className="anim-rise mt-4 text-[15px] leading-relaxed text-mute"
             style={{ "--index": 3 } as CSSProperties}
@@ -118,7 +119,7 @@ export default function LoginPage() {
             {SCOPE_ROWS.map(({ label, icon: Icon }) => (
               <li key={label} className="flex items-center gap-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sage text-sage-ink">
-                  <Icon size={15} weight="bold" />
+                  <Icon size={15} weight="bold" aria-hidden="true" />
                 </span>
                 <span className="text-[14px] text-ink-soft">{label}</span>
               </li>
@@ -142,7 +143,7 @@ export default function LoginPage() {
             className="anim-rise rounded-xl border border-line bg-surface px-6 py-7 sm:px-8 lg:border-0 lg:bg-transparent lg:p-0"
             style={{ "--index": 1 } as CSSProperties}
           >
-            <h2 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Sign in</h2>
+            <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Sign in</h1>
             <p className="mt-1 text-[14px] text-mute">Use the staff account issued to you.</p>
 
             <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
@@ -155,6 +156,10 @@ export default function LoginPage() {
                   name="identifier"
                   type="text"
                   autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  inputMode="email"
+                  enterKeyHint="next"
                   spellCheck={false}
                   placeholder="name@gmail.com"
                   value={identifier}
@@ -180,6 +185,7 @@ export default function LoginPage() {
                     name="password"
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
+                    enterKeyHint="go"
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -187,16 +193,17 @@ export default function LoginPage() {
                     aria-describedby={errors.password ? "password-error" : undefined}
                     className={`${inputBase} pr-11 ${errors.password ? inputBad : inputOk}`}
                   />
+                  {/* h-11/w-11 fills the input's reserved pr-11 strip: 44px tap target, same visual */}
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
                     aria-label={showPassword ? "Hide password" : "Show password"}
-                    className="absolute right-1.5 top-1/2 mt-1 -translate-y-1/2 rounded-md p-1.5 text-mute transition-colors duration-200 ease-quiet hover:text-ink"
+                    className="absolute right-0 top-1/2 mt-1 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md text-mute transition-colors duration-200 ease-quiet hover:text-ink"
                   >
                     {showPassword ? (
-                      <EyeSlashIcon size={17} weight="bold" />
+                      <EyeSlashIcon size={17} weight="bold" aria-hidden="true" />
                     ) : (
-                      <EyeIcon size={17} weight="bold" />
+                      <EyeIcon size={17} weight="bold" aria-hidden="true" />
                     )}
                   </button>
                 </div>
@@ -208,7 +215,7 @@ export default function LoginPage() {
               </div>
 
               <div className="flex items-center justify-between pt-0.5">
-                <label className="flex cursor-pointer items-center gap-2 text-[13.5px] text-ink-soft">
+                <label className="-my-2 flex cursor-pointer items-center gap-2 py-2 text-[13.5px] text-ink-soft">
                   <input
                     type="checkbox"
                     checked={remember}
@@ -217,12 +224,15 @@ export default function LoginPage() {
                   />
                   Keep me signed in
                 </label>
-                <a
-                  href="#"
-                  className="text-[13.5px] font-medium text-brand-deep underline-offset-4 transition-opacity duration-200 ease-quiet hover:underline hover:opacity-80"
+                <button
+                  type="button"
+                  onClick={() => {
+                    // TODO: password reset flow once the backend exists
+                  }}
+                  className="-my-2 py-2 text-[13.5px] font-medium text-brand-deep underline-offset-4 transition-opacity duration-200 ease-quiet hover:underline hover:opacity-80"
                 >
                   Forgot password?
-                </a>
+                </button>
               </div>
 
               <button
@@ -230,7 +240,9 @@ export default function LoginPage() {
                 disabled={submitting}
                 className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-ink text-[15px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-60"
               >
-                {submitting && <CircleNotchIcon size={16} weight="bold" className="animate-spin" />}
+                {submitting && (
+                  <CircleNotchIcon size={16} weight="bold" className="animate-spin" aria-hidden="true" />
+                )}
                 <span>{submitting ? "Signing in" : "Sign in"}</span>
               </button>
             </form>
