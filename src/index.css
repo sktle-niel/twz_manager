@@ -1,7 +1,58 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #f8f7f4;
+  --color-surface: #ffffff;
+  --color-line: #e9e8e4;
+  --color-ink: #151613;
+  --color-ink-soft: #3f423b;
+  --color-mute: #6e6d66;
+  --color-brand: #2fc12b;
+  --color-brand-deep: #1e7d1b;
+  --color-sage: #edf3ec;
+  --color-sage-ink: #346538;
+  --color-claret: #b3392f;
+
+  --font-sans: "Geist Variable", "Geist", system-ui, "Helvetica Neue", sans-serif;
+  --font-serif: "Newsreader Variable", "Newsreader", Charter, Georgia, serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", monospace;
+
+  --ease-quiet: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 body {
   margin: 0;
+  background-color: var(--color-canvas);
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Entry — gentle fade-up, staggered via --index */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.anim-rise {
+  animation: rise 600ms var(--ease-quiet) both;
+  animation-delay: calc(var(--index, 0) * 80ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-rise {
+    animation: none;
+  }
 }

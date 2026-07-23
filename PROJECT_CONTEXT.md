@@ -1,0 +1,81 @@
+# TWZ Manager — Project Context
+
+## What this is
+
+TWZ Manager is an internal web app (PWA) for **Two Wheels Zone**, a multi-branch motorcycle shop business. It digitizes the daily sales audit and bank deposit reconciliation process that is currently done by hand. The primary users are **branch managers**; the **business owner** uses it for oversight and assurance.
+
+It ships as a PWA used on phones and laptops because the team cannot build a native mobile app yet.
+
+## The problem
+
+Today the process is traditional and handwritten:
+
+1. Every night, each branch audits the day: they list everything sold and all expenses on paper.
+2. They deposit the day's earnings to the bank.
+3. They take a photo of the deposit receipt and send it to the owner.
+
+This is slow, error-prone, and gives the owner no reliable way to verify that the amount deposited actually matches what the branch earned that day. The owner's core need is **assurance that deposits are accurate**.
+
+## What already exists
+
+All sales in every branch go through **Loyverse POS**. Every sale is already recorded there, so the system does not need manual sales entry — it needs to pull sales data from Loyverse and reconcile it against bank deposits.
+
+## What we are building
+
+An automated daily sales audit and deposit reconciliation system, per branch (store):
+
+1. **Sales tracking** — Pull each branch's sales for the day from Loyverse POS, so sales can be monitored throughout the day.
+2. **Expense logging** — Branches record daily expenses (food and any other expense). The company covers meals and snacks (merienda) for staff, so these are legitimate expenses that are **automatically deducted** from the amount expected to be deposited. Every expense entry requires a **receipt attachment**.
+3. **Expected deposit computation** — For each branch, per day:
+
+   ```
+   Expected deposit = Loyverse POS daily sales − approved expenses (meals, snacks, other logged expenses)
+   ```
+
+4. **Deposit recording** — The branch manager deposits earnings to the bank and records the deposit in the app (amount + deposit slip/receipt photo). This replaces sending receipt photos to the owner manually.
+   - **Deposits are not always daily.** Sometimes a branch deposits every day; sometimes it batches and deposits every ~3 days. A single bank deposit can therefore cover **one or several audited days**.
+   - When recording a deposit, the manager selects which day(s) it covers (typically all unreconciled days since the last deposit).
+5. **Reconciliation (the core rule)** — The recorded bank deposit **must match** the total expected deposit for the day(s) it covers:
+
+   ```
+   Expected deposit (at deposit time) = sum over covered days of (POS daily sales − approved expenses)
+   ```
+
+   - **If it matches:** the covered days are closed as reconciled.
+   - **If it does not match:** the app **automatically requires a discrepancy form** before the covered days can be closed. The form must have:
+     - A **reason field** (with placeholder text guiding the manager on what to explain)
+     - A **receipt attachment** field (e.g., meal receipts) to justify the difference
+6. **Owner visibility** — The owner can see, per branch and per day: sales, expenses, expected deposit, actual deposit, match status, and any discrepancy forms with their attachments.
+
+## Daily flow (target state)
+
+| Step | Who | What happens |
+|---|---|---|
+| Throughout the day | System | Sales flow into Loyverse POS; app tracks the running daily total per branch |
+| During the day | Branch manager | Logs expenses (meals, snacks, others) with receipt photos; these auto-deduct from the expected deposit |
+| Evening (every day) | Branch manager | Reviews and closes the day: POS sales total and logged expenses; app records the day's net income and adds it to the running amount due for deposit |
+| Deposit day (daily, or batched up to every ~3 days) | Branch manager | Deposits the accumulated cash at the bank, then records the deposit amount, selects the day(s) it covers, and attaches the deposit slip photo |
+| Deposit day | System | Compares deposit vs the total expected for the covered day(s). Match → those days reconciled. Mismatch → discrepancy form (reason + receipt attachment) is required |
+| Anytime | Owner | Reviews dashboards/reports per branch: sales, expenses, amounts due for deposit, deposits, match status, discrepancies |
+
+## Key rules
+
+- The **audit is per branch (store), per day** — every day is closed with its POS sales and expenses, even when no deposit happens that day.
+- **Deposits can be daily or batched** (commonly up to every 3 days). One deposit covers one or more audited days, and reconciliation runs against the **sum** of those days.
+- Days that have been audited but not yet covered by a deposit show as **pending deposit** (amount due accumulates until the next deposit).
+- A mismatch can never be silently closed — the discrepancy form (reason + attachment) is mandatory.
+- Meals and merienda are company-covered: logged as expenses with receipts and deducted automatically from the expected deposit.
+- Receipts/attachments are required evidence for expenses, deposits, and discrepancies.
+
+## Technical notes
+
+- **Frontend:** Vite + React 19 + TypeScript + Tailwind CSS v4. Icons: `@phosphor-icons/react`.
+- **Platform:** PWA (installable on phones; works on laptops).
+- **POS integration:** Loyverse POS is the source of truth for sales. Integration will use the Loyverse API (stores, receipts) — exact endpoints/auth to be confirmed during backend work.
+- **Auth:** Sign in with username or Gmail + password. Branch managers get accounts issued by the owner. (Auth backend not built yet — the login form currently validates client-side only.)
+- **Repo:** https://github.com/sktle-niel/twz_manager (branches: `main`, `development`).
+
+## Current status (2026-07-23)
+
+- Login page UI is built (light, minimal, formal design; brand green as accent).
+- No backend yet: authentication, Loyverse integration, expense logging, deposit recording, and reconciliation are all still to be built.
