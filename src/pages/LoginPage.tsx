@@ -1,5 +1,6 @@
 import { useState } from "react"
 import type { CSSProperties, SubmitEvent } from "react"
+import { useNavigate } from "react-router-dom"
 import {
   BankIcon,
   ChartLineUpIcon,
@@ -19,6 +20,7 @@ const SCOPE_ROWS = [
 ]
 
 export default function LoginPage() {
+  const navigate = useNavigate()
   const [identifier, setIdentifier] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -46,8 +48,8 @@ export default function LoginPage() {
     setSubmitting(true)
     // TODO: wire to the real auth API once the backend exists
     await new Promise((r) => setTimeout(r, 900))
-    console.log("login attempt", { identifier: identifier.trim(), remember })
     setSubmitting(false)
+    navigate("/")
   }
 
   /* 16px on touch widths: WebKit zooms into focused inputs below 16px */
