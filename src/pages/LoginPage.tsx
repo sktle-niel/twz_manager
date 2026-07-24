@@ -1,6 +1,6 @@
 import { useState } from "react"
 import type { CSSProperties, SubmitEvent } from "react"
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import {
   BankIcon,
   ChartLineUpIcon,
@@ -249,11 +249,17 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <div className="mt-7 border-t border-line pt-4">
+            <div className="mt-7 flex items-center justify-between gap-3 border-t border-line pt-4">
               <p className="text-[12.5px] text-mute">
                 Access is limited to Two Wheels Zone staff. Contact the owner if you need an
                 account.
               </p>
+              <Link
+                to="/admin"
+                className="shrink-0 text-[13px] font-medium text-brand-deep underline-offset-4 transition-opacity duration-200 ease-quiet hover:underline hover:opacity-80"
+              >
+                Owner view →
+              </Link>
             </div>
           </div>
 

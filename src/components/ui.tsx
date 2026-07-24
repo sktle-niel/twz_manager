@@ -5,6 +5,10 @@ import { CameraIcon, CaretDownIcon, XIcon } from "@phosphor-icons/react"
 /* 16px on touch widths: WebKit zooms into focused controls below 16px */
 export const inputBase =
   "mt-2 w-full rounded-lg border bg-surface px-3.5 py-2.5 text-[16px] text-ink placeholder:text-mute outline-none transition-[border-color,box-shadow] duration-200 ease-quiet lg:text-[15px]"
+/* Same field styling without the top margin or fixed width, for inline rows
+   where the caller sets its own width (flex-1, w-24, …) */
+export const inputFlush =
+  "rounded-lg border bg-surface px-3.5 py-2.5 text-[16px] text-ink placeholder:text-mute outline-none transition-[border-color,box-shadow] duration-200 ease-quiet lg:text-[15px]"
 export const inputOk =
   "border-line-strong hover:border-mute focus:border-brand-deep focus:shadow-[0_0_0_2px_rgba(30,125,27,0.8)]"
 export const inputBad =

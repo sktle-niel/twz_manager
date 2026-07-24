@@ -9,11 +9,12 @@ import {
 } from "@phosphor-icons/react"
 import { peso, rowDate, shortDate } from "../lib/format"
 import { STORES, dayAuditFor, dayKey } from "../lib/mock"
-import type { DayStatus } from "../lib/mock"
+import type { DayAudit, DayStatus, Store } from "../lib/mock"
 import { FilterSelect } from "../components/ui"
 import { StatCard } from "../components/StatCard"
 import type { Stat } from "../components/StatCard"
 import { Pagination } from "../components/Pagination"
+import { addDays, startOfDay } from "../lib/dateRange"
 
 type RangePreset = "last7" | "last30" | "last90" | "thisMonth" | "lastMonth" | "thisYear"
 type StatusFilter = "all" | DayStatus
@@ -27,10 +28,6 @@ const RANGES: { value: RangePreset; label: string }[] = [
   { value: "thisYear", label: "This year" },
 ]
 
-const PAGE_SIZE = 20
-/* Safety bound on how far back one view will compute */
-const MAX_SCAN_DAYS = 400
-
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All statuses" },
   { value: "matched", label: "Matched" },
@@ -39,16 +36,9 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "open", label: "Open" },
 ]
 
-function startOfDay(d: Date): Date {
-  const c = new Date(d)
-  c.setHours(0, 0, 0, 0)
-  return c
-}
-function addDays(d: Date, n: number): Date {
-  const c = new Date(d)
-  c.setDate(c.getDate() + n)
-  return c
-}
+const PAGE_SIZE = 20
+/* Safety bound: a year across every branch is a little over a thousand rows */
+const MAX_ROWS = 2000
 
 function StatusChip({ status }: { status: DayStatus }) {
   switch (status) {
@@ -81,8 +71,8 @@ function StatusChip({ status }: { status: DayStatus }) {
   }
 }
 
-export default function HistoryPage() {
-  const [storeId, setStoreId] = useState("arevalo")
+export default function AdminHistoryPage() {
+  const [storeId, setStoreId] = useState("all")
   const [preset, setPreset] = useState<RangePreset>("last30")
   const [status, setStatus] = useState<StatusFilter>("all")
   const [page, setPage] = useState(1)
@@ -122,9 +112,20 @@ export default function HistoryPage() {
       break
   }
 
-  const allRows: { date: Date; audit: ReturnType<typeof dayAuditFor> }[] = []
-  for (let d = end; d >= start && allRows.length < MAX_SCAN_DAYS; d = addDays(d, -1)) {
-    allRows.push({ date: d, audit: dayAuditFor(storeId, d) })
+  const allBranches = storeId === "all"
+  const scopeStores = allBranches ? STORES : STORES.filter((s) => s.id === storeId)
+
+  const allRows: { key: string; date: Date; store: Store; audit: DayAudit }[] = []
+  for (let d = end; d >= start && allRows.length < MAX_ROWS; d = addDays(d, -1)) {
+    for (const store of scopeStores) {
+      allRows.push({
+        key: `${store.id}:${dayKey(d)}`,
+        date: d,
+        store,
+        audit: dayAuditFor(store.id, d),
+      })
+      if (allRows.length >= MAX_ROWS) break
+    }
   }
   const rows = allRows.filter((r) => status === "all" || r.audit.status === status)
 
@@ -137,7 +138,7 @@ export default function HistoryPage() {
   for (const r of allRows) counts[r.audit.status]++
   const expectedTotal = allRows.reduce((sum, r) => sum + r.audit.expected, 0)
 
-  const storeName = STORES.find((s) => s.id === storeId)?.name ?? ""
+  const scopeLabel = allBranches ? "All branches" : STORES.find((s) => s.id === storeId)?.name ?? ""
 
   const summaryStats: Stat[] = [
     { label: "Matched", value: String(counts.matched) },
@@ -152,7 +153,7 @@ export default function HistoryPage() {
       <div className="anim-rise mt-6" style={{ "--index": 0 } as CSSProperties}>
         <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">History</h1>
         <p className="mt-0.5 text-[13px] text-mute">
-          Every audited day and how its deposit reconciled.
+          Every audited day across the branches and how its deposit reconciled.
         </p>
       </div>
 
@@ -167,6 +168,7 @@ export default function HistoryPage() {
           value={storeId}
           onChange={setStoreId}
         >
+          <option value="all">All branches</option>
           {STORES.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
@@ -201,25 +203,22 @@ export default function HistoryPage() {
         </FilterSelect>
       </div>
 
-      {/* Day-by-day audit list, paired with the summary on wide screens */}
+      {/* Reconciliation list, paired with the summary on wide screens */}
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-[1.7fr_1fr]">
         <section
           className="anim-rise rounded-xl border border-line bg-surface"
           style={{ "--index": 2 } as CSSProperties}
         >
-        <div className="px-5 pb-1 pt-4">
-          <h2 className="text-[15px] font-semibold text-ink">{storeName} branch</h2>
-          <p className="mt-0.5 text-[13px] text-mute">
-            Expected deposit is gross sales minus logged expenses for the day.
-          </p>
-        </div>
-
-        <div className="mt-2 hidden gap-x-4 border-b border-line px-5 py-2.5 sm:grid sm:grid-cols-[1.3fr_1fr_1fr_1fr_auto]">
-          <span className="text-[12px] font-medium text-mute">Date</span>
-          <span className="text-right text-[12px] font-medium text-mute">Gross sales</span>
-          <span className="text-right text-[12px] font-medium text-mute">Expected</span>
-          <span className="text-right text-[12px] font-medium text-mute">Deposited</span>
-          <span className="text-right text-[12px] font-medium text-mute">Status</span>
+        <div className="flex items-baseline justify-between gap-3 px-5 pb-1 pt-4">
+          <div>
+            <h2 className="text-[15px] font-semibold text-ink">{scopeLabel}</h2>
+            <p className="mt-0.5 text-[13px] text-mute">
+              Expected deposit is gross sales minus logged expenses for the day.
+            </p>
+          </div>
+          <span className="shrink-0 text-[12px] tabular-nums text-mute">
+            {rows.length.toLocaleString()} {rows.length === 1 ? "record" : "records"}
+          </span>
         </div>
 
         {rows.length === 0 ? (
@@ -228,37 +227,30 @@ export default function HistoryPage() {
           </p>
         ) : (
           <>
-          <ul className="divide-y divide-line">
-            {pageRows.map(({ date, audit }) => (
-              <li
-                key={dayKey(date)}
-                className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1.5 px-5 py-3 sm:grid-cols-[1.3fr_1fr_1fr_1fr_auto]"
-              >
-                <span className="text-[13.5px] font-medium text-ink-soft sm:order-1">
-                  {audit.status === "open" ? `Today, ${shortDate(date)}` : rowDate(date)}
+          <ul className="mt-1 divide-y divide-line">
+            {pageRows.map(({ key, date, store, audit }) => (
+              <li key={key} className="flex items-center justify-between gap-3 px-5 py-3">
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="text-[13.5px] font-medium text-ink-soft">
+                      {audit.status === "open" ? `Today, ${shortDate(date)}` : rowDate(date)}
+                    </span>
+                    {allBranches && <span className="text-[12px] text-mute">· {store.name}</span>}
+                  </span>
+                  <span className="mt-0.5 block text-[12px] tabular-nums text-mute">
+                    Gross {peso.format(audit.gross)} ·{" "}
+                    {audit.deposited === null
+                      ? audit.status === "open"
+                        ? "still open"
+                        : "not yet deposited"
+                      : `deposited ${peso.format(audit.deposited)}`}
+                  </span>
                 </span>
-                <span className="text-right text-[14px] font-semibold tabular-nums text-ink sm:order-3 sm:text-[13.5px]">
-                  {peso.format(audit.expected)}
-                </span>
-                <span className="sm:order-5 sm:justify-self-end">
+                <span className="flex shrink-0 flex-col items-end gap-1">
+                  <span className="text-[14px] font-semibold tabular-nums text-ink">
+                    {peso.format(audit.expected)}
+                  </span>
                   <StatusChip status={audit.status} />
-                </span>
-                <span className="text-right text-[12px] tabular-nums text-mute sm:order-4 sm:text-[13px]">
-                  {audit.deposited === null ? (
-                    audit.status === "open" ? (
-                      "Still open"
-                    ) : (
-                      "Not yet deposited"
-                    )
-                  ) : (
-                    <>
-                      <span className="sm:hidden">Deposited </span>
-                      {peso.format(audit.deposited)}
-                    </>
-                  )}
-                </span>
-                <span className="hidden text-right text-[13px] tabular-nums text-mute sm:order-2 sm:block">
-                  {peso.format(audit.gross)}
                 </span>
               </li>
             ))}
@@ -268,13 +260,13 @@ export default function HistoryPage() {
             pageSize={PAGE_SIZE}
             total={rows.length}
             onPageChange={setPage}
-            unit="days"
+            unit="records"
           />
           </>
         )}
         </section>
 
-        <StatCard title="In this range" subtitle={`${storeName} branch`} stats={summaryStats} index={3} />
+        <StatCard title="In this range" subtitle={scopeLabel} stats={summaryStats} index={3} />
       </div>
     </>
   )

@@ -4,8 +4,11 @@ import {
   BowlFoodIcon,
   CaretDownIcon,
   CoffeeIcon,
+  DropIcon,
+  LightningIcon,
   PackageIcon,
   StorefrontIcon,
+  WifiHighIcon,
 } from "@phosphor-icons/react"
 import type { Icon } from "@phosphor-icons/react"
 import { peso, rowDate } from "../lib/format"
@@ -23,10 +26,38 @@ import {
 const CATEGORY_ICON: Record<ExpenseCategory, Icon> = {
   Meals: BowlFoodIcon,
   Merienda: CoffeeIcon,
+  "Water bill": DropIcon,
+  "Electric bill": LightningIcon,
+  "Wifi bill": WifiHighIcon,
   Other: PackageIcon,
 }
 
-const CATEGORIES: ExpenseCategory[] = ["Meals", "Merienda", "Other"]
+const CATEGORIES: ExpenseCategory[] = [
+  "Meals",
+  "Merienda",
+  "Water bill",
+  "Electric bill",
+  "Wifi bill",
+  "Other",
+]
+
+const NOTE_PLACEHOLDER: Record<ExpenseCategory, string> = {
+  Meals: "e.g. Staff lunch",
+  Merienda: "e.g. Afternoon merienda",
+  "Water bill": "e.g. June billing period",
+  "Electric bill": "e.g. June billing period, meter reading",
+  "Wifi bill": "e.g. June billing period, account number",
+  Other: "e.g. Tricycle fare, parts pickup",
+}
+
+const DEFAULT_NOTE: Record<ExpenseCategory, string> = {
+  Meals: "Staff meal",
+  Merienda: "Afternoon merienda",
+  "Water bill": "Water bill",
+  "Electric bill": "Electric bill",
+  "Wifi bill": "Wifi bill",
+  Other: "Other expense",
+}
 
 type FieldErrors = { amount?: string; note?: string; receipt?: string }
 
@@ -95,7 +126,7 @@ export default function ExpensesPage() {
     const item: ExpenseItem = {
       id: `local-${Date.now().toString(36)}`,
       category,
-      note: note.trim() || (category === "Meals" ? "Staff meal" : "Merienda"),
+      note: note.trim() || DEFAULT_NOTE[category],
       amount: Math.round(Number(amount.replace(/,/g, ""))),
       time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
     }
@@ -137,11 +168,12 @@ export default function ExpensesPage() {
         </FilterSelect>
       </div>
 
-      {/* Log expense */}
-      <section
-        className="anim-rise mt-5 rounded-xl border border-line bg-surface p-5 sm:p-6"
-        style={{ "--index": 1 } as CSSProperties}
-      >
+      <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+        {/* Log expense */}
+        <section
+          className="anim-rise rounded-xl border border-line bg-surface p-5 sm:p-6"
+          style={{ "--index": 1 } as CSSProperties}
+        >
         <h2 className="text-[15px] font-semibold text-ink">Log an expense</h2>
         <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -197,7 +229,7 @@ export default function ExpensesPage() {
             <input
               id="expense-note"
               type="text"
-              placeholder={category === "Other" ? "e.g. Tricycle fare, parts pickup" : "e.g. Staff lunch"}
+              placeholder={NOTE_PLACEHOLDER[category]}
               value={note}
               onChange={(e) => setNote(e.target.value)}
               aria-invalid={Boolean(errors.note)}
@@ -232,11 +264,11 @@ export default function ExpensesPage() {
         </form>
       </section>
 
-      {/* Recent expenses */}
-      <section
-        className="anim-rise mt-5 rounded-xl border border-line bg-surface"
-        style={{ "--index": 2 } as CSSProperties}
-      >
+        {/* Recent expenses */}
+        <section
+          className="anim-rise rounded-xl border border-line bg-surface"
+          style={{ "--index": 2 } as CSSProperties}
+        >
         <div className="flex items-baseline justify-between px-5 pb-1 pt-4">
           <h2 className="text-[15px] font-semibold text-ink">Today</h2>
           <p className="text-[13px] font-medium tabular-nums text-mute">{peso.format(todayTotal)}</p>
@@ -262,7 +294,8 @@ export default function ExpensesPage() {
             <ExpenseRow key={item.id} item={item} />
           ))}
         </ul>
-      </section>
+        </section>
+      </div>
     </>
   )
 }
