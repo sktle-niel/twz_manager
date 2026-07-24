@@ -6,13 +6,13 @@ import { FormField, inputBad, inputBase, inputOk } from "../components/ui"
 
 type PasswordErrors = { current?: string; next?: string; confirm?: string }
 
-export default function AccountPage() {
+export default function AdminAccountPage() {
   const navigate = useNavigate()
 
-  // Sample profile until auth exists; issued by the owner
-  const [fullName, setFullName] = useState("Marvin Deocampo")
-  const [username, setUsername] = useState("marvin.deocampo")
-  const [email, setEmail] = useState("marvin.deocampo@gmail.com")
+  // Sample owner profile until auth exists
+  const [fullName, setFullName] = useState("Two Wheels Zone")
+  const [username, setUsername] = useState("twz.owner")
+  const [email, setEmail] = useState("owner@gmail.com")
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
 
@@ -61,9 +61,7 @@ export default function AccountPage() {
     <>
       <div className="anim-rise mt-6" style={{ "--index": 0 } as CSSProperties}>
         <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Account</h1>
-        <p className="mt-0.5 text-[13px] text-mute">
-          Your profile and sign-in details for this branch.
-        </p>
+        <p className="mt-0.5 text-[13px] text-mute">Your owner profile and sign-in details.</p>
       </div>
 
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
@@ -75,9 +73,9 @@ export default function AccountPage() {
         <h2 className="text-[15px] font-semibold text-ink">Profile</h2>
         <form onSubmit={handleProfileSubmit} noValidate className="mt-4 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="account-name" label="Full name">
+            <FormField id="owner-name" label="Full name">
               <input
-                id="account-name"
+                id="owner-name"
                 type="text"
                 autoComplete="name"
                 value={fullName}
@@ -85,9 +83,9 @@ export default function AccountPage() {
                 className={`${inputBase} ${inputOk}`}
               />
             </FormField>
-            <FormField id="account-username" label="Username">
+            <FormField id="owner-username" label="Username">
               <input
-                id="account-username"
+                id="owner-username"
                 type="text"
                 autoComplete="username"
                 autoCapitalize="none"
@@ -99,9 +97,9 @@ export default function AccountPage() {
               />
             </FormField>
           </div>
-          <FormField id="account-email" label="Gmail">
+          <FormField id="owner-email" label="Gmail">
             <input
-              id="account-email"
+              id="owner-email"
               type="email"
               autoComplete="email"
               autoCapitalize="none"
@@ -112,15 +110,11 @@ export default function AccountPage() {
               className={`${inputBase} ${inputOk}`}
             />
           </FormField>
-          <FormField
-            id="account-branch"
-            label="Branch"
-            hint="Branch assignment is managed by the owner."
-          >
+          <FormField id="owner-role" label="Role" hint="You have full access across every branch.">
             <input
-              id="account-branch"
+              id="owner-role"
               type="text"
-              value="Arevalo"
+              value="Owner"
               disabled
               className={`${inputBase} border-line bg-canvas text-mute disabled:cursor-not-allowed`}
             />
@@ -145,44 +139,44 @@ export default function AccountPage() {
         >
         <h2 className="text-[15px] font-semibold text-ink">Change password</h2>
         <form onSubmit={handlePasswordSubmit} noValidate className="mt-4 space-y-4">
-          <FormField id="password-current" label="Current password" error={passwordErrors.current}>
+          <FormField id="owner-password-current" label="Current password" error={passwordErrors.current}>
             <input
-              id="password-current"
+              id="owner-password-current"
               type="password"
               autoComplete="current-password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               aria-invalid={Boolean(passwordErrors.current)}
-              aria-describedby={passwordErrors.current ? "password-current-error" : undefined}
+              aria-describedby={passwordErrors.current ? "owner-password-current-error" : undefined}
               className={`${inputBase} ${passwordErrors.current ? inputBad : inputOk}`}
             />
           </FormField>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="password-new" label="New password" error={passwordErrors.next}>
+            <FormField id="owner-password-new" label="New password" error={passwordErrors.next}>
               <input
-                id="password-new"
+                id="owner-password-new"
                 type="password"
                 autoComplete="new-password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 aria-invalid={Boolean(passwordErrors.next)}
-                aria-describedby={passwordErrors.next ? "password-new-error" : undefined}
+                aria-describedby={passwordErrors.next ? "owner-password-new-error" : undefined}
                 className={`${inputBase} ${passwordErrors.next ? inputBad : inputOk}`}
               />
             </FormField>
             <FormField
-              id="password-confirm"
+              id="owner-password-confirm"
               label="Confirm new password"
               error={passwordErrors.confirm}
             >
               <input
-                id="password-confirm"
+                id="owner-password-confirm"
                 type="password"
                 autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 aria-invalid={Boolean(passwordErrors.confirm)}
-                aria-describedby={passwordErrors.confirm ? "password-confirm-error" : undefined}
+                aria-describedby={passwordErrors.confirm ? "owner-password-confirm-error" : undefined}
                 className={`${inputBase} ${passwordErrors.confirm ? inputBad : inputOk}`}
               />
             </FormField>

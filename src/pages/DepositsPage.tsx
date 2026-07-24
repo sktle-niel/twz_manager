@@ -177,11 +177,13 @@ export default function DepositsPage() {
         </FilterSelect>
       </div>
 
-      {/* Days waiting for a deposit */}
-      <section
-        className="anim-rise mt-5 rounded-xl border border-line bg-surface"
-        style={{ "--index": 1 } as CSSProperties}
-      >
+      <div className="mt-5 grid items-start gap-5 xl:grid-cols-[1.1fr_1fr]">
+        <div className="grid gap-5">
+          {/* Days waiting for a deposit */}
+          <section
+            className="anim-rise rounded-xl border border-line bg-surface"
+            style={{ "--index": 1 } as CSSProperties}
+          >
         <div className="px-5 pb-1 pt-4">
           <h2 className="text-[15px] font-semibold text-ink">For deposit</h2>
           <p className="mt-0.5 text-[13px] text-mute">
@@ -237,11 +239,11 @@ export default function DepositsPage() {
         )}
       </section>
 
-      {/* Record the deposit */}
-      <section
-        className="anim-rise mt-5 rounded-xl border border-line bg-surface p-5 sm:p-6"
-        style={{ "--index": 2 } as CSSProperties}
-      >
+          {/* Record the deposit */}
+          <section
+            className="anim-rise rounded-xl border border-line bg-surface p-5 sm:p-6"
+            style={{ "--index": 2 } as CSSProperties}
+          >
         <h2 className="text-[15px] font-semibold text-ink">Record a deposit</h2>
         <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -337,13 +339,14 @@ export default function DepositsPage() {
             )}
           </div>
         </form>
-      </section>
+          </section>
+        </div>
 
-      {/* History */}
-      <section
-        className="anim-rise mt-5 rounded-xl border border-line bg-surface"
-        style={{ "--index": 3 } as CSSProperties}
-      >
+        {/* History */}
+        <section
+          className="anim-rise rounded-xl border border-line bg-surface"
+          style={{ "--index": 3 } as CSSProperties}
+        >
         <div className="px-5 pb-1 pt-4">
           <h2 className="text-[15px] font-semibold text-ink">Recent deposits</h2>
         </div>
@@ -363,7 +366,8 @@ export default function DepositsPage() {
             </li>
           ))}
         </ul>
-      </section>
+        </section>
+      </div>
     </>
   )
 }

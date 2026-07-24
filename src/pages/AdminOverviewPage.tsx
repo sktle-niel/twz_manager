@@ -10,7 +10,7 @@ import { StatCard } from "../components/StatCard"
 import type { Stat } from "../components/StatCard"
 import { Pagination } from "../components/Pagination"
 import { STORES, dayKey, expensesFor, grossSalesFor, visibleHourlySales } from "../lib/mock"
-import { addDays, presetRange, rangeDays, rangeLabel, sameDay, startOfDay } from "../lib/dateRange"
+import { presetRange, rangeDays, rangeLabel, sameDay, startOfDay } from "../lib/dateRange"
 import type { DateRange } from "../lib/dateRange"
 
 const rowGrid =
@@ -18,7 +18,7 @@ const rowGrid =
 
 const PAGE_SIZE = 20
 
-export default function DashboardPage() {
+export default function AdminOverviewPage() {
   const [storeId, setStoreId] = useState("all")
   const [range, setRange] = useState<DateRange>(() => presetRange("today", startOfDay(new Date())))
   const [page, setPage] = useState(1)
@@ -30,8 +30,10 @@ export default function DashboardPage() {
   const today = startOfDay(new Date())
   const days = rangeDays(range, today)
 
-  const storeIds = storeId === "all" ? STORES.map((s) => s.id) : [storeId]
+  const allBranches = storeId === "all"
+  const storeIds = allBranches ? STORES.map((s) => s.id) : [storeId]
   const singleDay = days.length === 1
+  const scopeLabel = allBranches ? "All branches" : STORES.find((s) => s.id === storeId)?.name ?? ""
 
   let chartData: SalesPoint[] = []
   if (singleDay) {
@@ -58,18 +60,32 @@ export default function DashboardPage() {
   )
   const expectedTotal = grossTotal - expensesTotal
 
-  const storeLabel =
-    storeId === "all" ? "All branches" : STORES.find((s) => s.id === storeId)?.name ?? ""
   const label = rangeLabel(range, today)
 
-  const listDays: Date[] = singleDay
-    ? Array.from({ length: 7 }, (_, i) => addDays(range.start, -(i + 1)))
-    : [...days].reverse()
-  const listTitle = singleDay ? "Previous days" : "Daily summary"
+  // All branches -> one row per branch; a single branch -> one row per day
+  const tableRows = allBranches
+    ? STORES.map((s) => ({
+        key: s.id,
+        label: s.name,
+        gross: days.reduce((sum, d) => sum + grossSalesFor(s.id, d), 0),
+        expenses: days.reduce((sum, d) => sum + expensesFor(s.id, d), 0),
+      }))
+    : [...days].reverse().map((d) => ({
+        key: dayKey(d),
+        label: sameDay(d, today) ? `Today, ${shortDate(d)}` : rowDate(d),
+        gross: grossSalesFor(storeId, d),
+        expenses: expensesFor(storeId, d),
+      }))
 
-  const listTotalPages = Math.max(1, Math.ceil(listDays.length / PAGE_SIZE))
-  const listPage = Math.min(page, listTotalPages)
-  const pageDays = listDays.slice((listPage - 1) * PAGE_SIZE, listPage * PAGE_SIZE)
+  const tableTotalPages = Math.max(1, Math.ceil(tableRows.length / PAGE_SIZE))
+  const tablePage = Math.min(page, tableTotalPages)
+  const pageTableRows = tableRows.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE)
+
+  const firstColHeader = allBranches ? "Branch" : "Date"
+  const tableTitle = allBranches ? "By branch" : `${scopeLabel} branch`
+  const tableSubtitle = allBranches
+    ? "Gross sales, expenses, and expected deposit per branch."
+    : "Gross sales, expenses, and expected deposit per day."
 
   const best = chartData.reduce(
     (top, p) => (p.amount > top.amount ? p : top),
@@ -77,6 +93,10 @@ export default function DashboardPage() {
   )
   const average = chartData.length ? Math.round(grossTotal / chartData.length) : 0
   const expensesShare = grossTotal > 0 ? Math.round((expensesTotal / grossTotal) * 100) : 0
+  const topBranch =
+    allBranches && tableRows.length > 0
+      ? tableRows.reduce((top, r) => (r.gross > top.gross ? r : top), tableRows[0])
+      : null
   const rangeStats: Stat[] = [
     { label: singleDay ? "Hours recorded" : "Days recorded", value: String(chartData.length) },
     { label: singleDay ? "Average per hour" : "Average per day", value: peso.format(average) },
@@ -85,17 +105,20 @@ export default function DashboardPage() {
       value: peso.format(best.amount),
       hint: best.label,
     },
+    ...(topBranch
+      ? [{ label: "Top branch", value: peso.format(topBranch.gross), hint: topBranch.label }]
+      : []),
     { label: "Expenses share", value: `${expensesShare}%`, hint: "of gross sales" },
   ]
 
   return (
     <>
-      <h1
-        className="anim-rise mt-6 text-[22px] font-semibold tracking-[-0.01em] text-ink"
-        style={{ "--index": 0 } as CSSProperties}
-      >
-        Dashboard
-      </h1>
+      <div className="anim-rise mt-6" style={{ "--index": 0 } as CSSProperties}>
+        <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Overview</h1>
+        <p className="mt-0.5 text-[13px] text-mute">
+          Sales, expenses, and expected deposits across every branch.
+        </p>
+      </div>
 
       {/* Filters */}
       <div
@@ -137,7 +160,7 @@ export default function DashboardPage() {
                   {peso.format(grossTotal)}
                 </p>
                 <p className="mt-1.5 text-[13px] text-mute">
-                  {label} · {storeLabel}
+                  {label} · {scopeLabel}
                 </p>
               </div>
               <dl className="flex gap-6">
@@ -161,69 +184,75 @@ export default function DashboardPage() {
                 No sales recorded yet today. The chart fills in as the day goes.
               </p>
             ) : (
-              <SalesChart data={chartData} ariaLabel={`Gross sales chart, ${label}, ${storeLabel}`} />
+              <SalesChart data={chartData} ariaLabel={`Gross sales chart, ${label}, ${scopeLabel}`} />
             )}
           </>
         )}
       </section>
 
-      {/* Per-day summary, paired with the range stats on wide screens */}
+      {/* Combined table, paired with the range stats on wide screens */}
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-[1.6fr_1fr]">
         <section
           className="anim-rise rounded-xl border border-line bg-surface"
           style={{ "--index": 3 } as CSSProperties}
         >
         <div className="px-5 pb-1 pt-4">
-          <h2 className="text-[15px] font-semibold text-ink">{listTitle}</h2>
-          <p className="mt-0.5 text-[13px] text-mute">
-            Gross sales, expenses, and the expected bank deposit per day.
-          </p>
+          <h2 className="text-[15px] font-semibold text-ink">{tableTitle}</h2>
+          <p className="mt-0.5 text-[13px] text-mute">{tableSubtitle}</p>
         </div>
 
         <div className="mt-2 hidden gap-x-4 border-b border-line px-5 py-2.5 sm:grid sm:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
-          <span className="text-[12px] font-medium text-mute">Date</span>
+          <span className="text-[12px] font-medium text-mute">{firstColHeader}</span>
           <span className="text-right text-[12px] font-medium text-mute">Gross sales</span>
           <span className="text-right text-[12px] font-medium text-mute">Expenses</span>
           <span className="text-right text-[12px] font-medium text-mute">Expected deposit</span>
         </div>
 
-        {listDays.length === 0 ? (
-          <p className="px-5 py-10 text-center text-[14px] text-mute">
-            No days in this range yet.
-          </p>
+        {days.length === 0 ? (
+          <p className="px-5 py-10 text-center text-[14px] text-mute">No days in this range yet.</p>
         ) : (
           <>
-          <ul className="divide-y divide-line">
-            {pageDays.map((d) => {
-              const gross = storeIds.reduce((s, id) => s + grossSalesFor(id, d), 0)
-              const spent = storeIds.reduce((s, id) => s + expensesFor(id, d), 0)
-              return (
-                <li key={dayKey(d)} className={rowGrid}>
-                  <span className="text-[13.5px] font-medium text-ink-soft">
-                    {sameDay(d, today) ? `Today, ${shortDate(d)}` : rowDate(d)}
-                  </span>
+            <ul className="divide-y divide-line">
+              {pageTableRows.map((r) => (
+                <li key={r.key} className={rowGrid}>
+                  <span className="text-[13.5px] font-medium text-ink-soft">{r.label}</span>
                   <span className="text-right text-[14px] font-semibold tabular-nums text-ink">
-                    {peso.format(gross)}
+                    {peso.format(r.gross)}
                   </span>
                   <span className="text-[12px] tabular-nums text-mute sm:text-right sm:text-[13px]">
                     <span className="sm:hidden">Expenses </span>
-                    {peso.format(spent)}
+                    {peso.format(r.expenses)}
                   </span>
                   <span className="text-right text-[12px] tabular-nums text-mute sm:text-[13px]">
                     <span className="sm:hidden">Expected </span>
-                    {peso.format(gross - spent)}
+                    {peso.format(r.gross - r.expenses)}
                   </span>
                 </li>
-              )
-            })}
-          </ul>
-          <Pagination
-            page={listPage}
-            pageSize={PAGE_SIZE}
-            total={listDays.length}
-            onPageChange={setPage}
-            unit="days"
-          />
+              ))}
+            </ul>
+
+            <div className={`${rowGrid} border-t border-line`}>
+              <span className="text-[13.5px] font-semibold text-ink">Total</span>
+              <span className="text-right text-[14px] font-semibold tabular-nums text-ink">
+                {peso.format(grossTotal)}
+              </span>
+              <span className="text-[12px] font-medium tabular-nums text-ink-soft sm:text-right sm:text-[13px]">
+                <span className="sm:hidden">Expenses </span>
+                {peso.format(expensesTotal)}
+              </span>
+              <span className="text-right text-[12px] font-medium tabular-nums text-ink-soft sm:text-[13px]">
+                <span className="sm:hidden">Expected </span>
+                {peso.format(expectedTotal)}
+              </span>
+            </div>
+
+            <Pagination
+              page={tablePage}
+              pageSize={PAGE_SIZE}
+              total={tableRows.length}
+              onPageChange={setPage}
+              unit={allBranches ? "branches" : "days"}
+            />
           </>
         )}
         </section>
