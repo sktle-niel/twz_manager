@@ -75,7 +75,13 @@ An automated daily sales audit and deposit reconciliation system, per branch (st
 - **Auth:** Sign in with username or Gmail + password. Branch managers get accounts issued by the owner. (Auth backend not built yet — the login form currently validates client-side only.)
 - **Repo:** https://github.com/sktle-niel/twz_manager (branches: `main`, `development`).
 
-## Current status (2026-07-23)
+## Current status (2026-07-24)
 
 - Login page UI is built (light, minimal, formal design; brand green as accent).
-- No backend yet: authentication, Loyverse integration, expense logging, deposit recording, and reconciliation are all still to be built.
+- Dashboard UI is built with mock data: gross sales chart (hourly for a single day, daily bars for ranges), branch and Loyverse-style date-range filters, and a per-day summary list (gross sales, expenses, expected deposit).
+- App shell: sidebar navigation on desktop (Dashboard, Expenses, Deposits, History, Account); iOS-style bottom tab bar on mobile (Dashboard, Expenses, center "New entry" button opening a sheet, Deposits, History) with Account in the top-right of the mobile header.
+- Expenses page UI: log form (amount, category, note, required receipt photo) plus recent-expenses list.
+- Deposits page UI: pending audited days with covered-day selection, live match/discrepancy indicator against the expected total, required deposit-slip photo, recent deposits with Matched/Discrepancy status.
+- Account page UI: profile, change password, sign out.
+- History page UI: per-branch day-by-day audit list (gross sales, expected deposit, actual deposit, status: Open / Pending deposit / Matched / Discrepancy) with branch, date-range, and status filters. Day status comes from a single mock source (`dayAuditFor`) so pages stay consistent.
+- Routing: react-router-dom ("/" dashboard, "/expenses", "/deposits", "/history", "/account" inside the shell; "/login" standalone). Charts: recharts (route-split so only the dashboard loads it). All data is deterministic mock (`src/lib/mock.ts`); no backend yet: authentication, Loyverse integration, and real persistence are still to be built.
