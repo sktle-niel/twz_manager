@@ -1,22 +1,27 @@
 import { useState } from "react"
 import type { CSSProperties, SubmitEvent } from "react"
-import {
-  CheckCircleIcon,
-  StorefrontIcon,
-  WarningCircleIcon,
-} from "@phosphor-icons/react"
+import { CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react"
 import { peso, rowDate, shortDate } from "../lib/format"
-import { STORES, dayKey, expectedDepositFor } from "../lib/mock"
 import {
-  FilterSelect,
+  DEPOSIT_TIMELINE,
+  dayKey,
+  expectedDepositFor,
+  pendingDepositDays,
+} from "../lib/mock"
+import {
+  BranchTag,
   FormField,
   PhotoAttach,
   inputBad,
   inputBase,
   inputOk,
 } from "../components/ui"
+import { useSession } from "../lib/session"
 
-type FieldErrors = { amount?: string; days?: string; slip?: string }
+type FieldErrors = { amount?: string; reference?: string; days?: string; slip?: string }
+
+/* Branches usually deposit at least this often; past it, the backlog is flagged */
+const BATCH_WINDOW_DAYS = 3
 
 type RecordedDeposit = {
   id: string
@@ -47,7 +52,8 @@ function StatusChip({ matched }: { matched: boolean }) {
 }
 
 export default function DepositsPage() {
-  const [storeId, setStoreId] = useState("arevalo")
+  const { store } = useSession()
+  const storeId = store.id
   const [checkedDays, setCheckedDays] = useState<Record<string, boolean>>({})
   const [amount, setAmount] = useState("")
   const [reference, setReference] = useState("")
@@ -61,8 +67,8 @@ export default function DepositsPage() {
 
   const today = new Date()
 
-  // Mock: the last two audited days are still waiting for a deposit
-  const pendingDays = [addDays(today, -2), addDays(today, -1)].filter(
+  // Every audited day not yet covered by a deposit, however far back it runs
+  const pendingDays = pendingDepositDays(storeId, today).filter(
     (d) => !(clearedByStore[storeId] ?? []).includes(dayKey(d)),
   )
   const isChecked = (d: Date) => checkedDays[`${storeId}:${dayKey(d)}`] ?? true
@@ -72,26 +78,27 @@ export default function DepositsPage() {
     0,
   )
 
-  // Mock history: one older matched deposit, one with a shortage
+  // Mock history: one deposit covering two days, one that came up short
   const historyBase: RecordedDeposit[] = (() => {
-    const d3 = addDays(today, -3)
-    const d4 = addDays(today, -4)
-    const d5 = addDays(today, -5)
-    const matchedAmount = expectedDepositFor(storeId, d3) + expectedDepositFor(storeId, d4)
-    const shortAmount = expectedDepositFor(storeId, d5) - 180
+    const [olderBack, newerBack] = DEPOSIT_TIMELINE.matchedPair
+    const older = addDays(today, -olderBack)
+    const newer = addDays(today, -newerBack)
+    const short = addDays(today, -DEPOSIT_TIMELINE.shortDay)
+    const matchedAmount = expectedDepositFor(storeId, newer) + expectedDepositFor(storeId, older)
+    const shortAmount = expectedDepositFor(storeId, short) - DEPOSIT_TIMELINE.shortfall
     return [
       {
         id: `${storeId}-hist-1`,
-        dateLabel: rowDate(d3),
+        dateLabel: rowDate(newer),
         amount: matchedAmount,
-        coversLabel: `Covers ${shortDate(d4)} and ${shortDate(d3)}`,
+        coversLabel: `Covers ${shortDate(older)} and ${shortDate(newer)}`,
         matched: true,
       },
       {
         id: `${storeId}-hist-2`,
-        dateLabel: rowDate(d5),
+        dateLabel: rowDate(short),
         amount: shortAmount,
-        coversLabel: `Covers ${shortDate(d5)}`,
+        coversLabel: `Covers ${shortDate(short)}`,
         matched: false,
       },
     ]
@@ -103,6 +110,7 @@ export default function DepositsPage() {
     const value = Number(amount.replace(/,/g, ""))
     if (!amount.trim()) next.amount = "Enter the amount deposited."
     else if (!Number.isFinite(value) || value <= 0) next.amount = "Enter an amount above zero."
+    if (!reference.trim()) next.reference = "Enter the reference number from the bank."
     if (selectedDays.length === 0) next.days = "Select at least one day this deposit covers."
     if (!slip) next.slip = "The deposit slip photo is required."
     return next
@@ -163,18 +171,7 @@ export default function DepositsPage() {
             Record each bank deposit and the audited days it covers.
           </p>
         </div>
-        <FilterSelect
-          ariaLabel="Branch"
-          icon={<StorefrontIcon size={15} weight="bold" aria-hidden="true" />}
-          value={storeId}
-          onChange={setStoreId}
-        >
-          {STORES.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </FilterSelect>
+        <BranchTag name={store.name} />
       </div>
 
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-[1.1fr_1fr]">
@@ -189,6 +186,13 @@ export default function DepositsPage() {
           <p className="mt-0.5 text-[13px] text-mute">
             Audited days not yet covered by a bank deposit.
           </p>
+          {pendingDays.length > BATCH_WINDOW_DAYS && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-[13px] text-claret">
+              <WarningCircleIcon size={15} weight="fill" aria-hidden="true" />
+              {pendingDays.length} days waiting — deposits are usually made every{" "}
+              {BATCH_WINDOW_DAYS} days.
+            </p>
+          )}
         </div>
         {pendingDays.length === 0 ? (
           <p className="px-5 pb-5 pt-2 text-[13.5px] text-mute">
@@ -261,6 +265,7 @@ export default function DepositsPage() {
                   placeholder="0"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
+                  aria-required="true"
                   aria-invalid={Boolean(errors.amount)}
                   aria-describedby={errors.amount ? "deposit-amount-error" : undefined}
                   className={`${inputBase} pl-8 ${errors.amount ? inputBad : inputOk}`}
@@ -302,8 +307,9 @@ export default function DepositsPage() {
 
           <FormField
             id="deposit-reference"
-            label="Reference number (optional)"
+            label="Reference number"
             hint="The transaction or slip number from the bank."
+            error={errors.reference}
           >
             <input
               id="deposit-reference"
@@ -311,7 +317,10 @@ export default function DepositsPage() {
               placeholder="e.g. 004512"
               value={reference}
               onChange={(e) => setReference(e.target.value)}
-              className={`${inputBase} ${inputOk}`}
+              aria-required="true"
+              aria-invalid={Boolean(errors.reference)}
+              aria-describedby={errors.reference ? "deposit-reference-error" : undefined}
+              className={`${inputBase} ${errors.reference ? inputBad : inputOk}`}
             />
           </FormField>
 

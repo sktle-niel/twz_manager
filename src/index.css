@@ -81,10 +81,81 @@ body {
   animation: fade-in 200ms ease-out both;
 }
 
+/* Toast: slides up, its check ring pops, then the tick draws itself */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes check-ring {
+  from {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 22;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.anim-toast {
+  animation: toast-in 260ms var(--ease-quiet) both;
+}
+
+/* Dropdown menu: a small pop from the top edge */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.anim-pop {
+  transform-origin: top;
+  animation: pop-in 140ms var(--ease-quiet) both;
+}
+
+.anim-check-ring {
+  animation: check-ring 240ms var(--ease-quiet) both;
+}
+
+/*
+ * Resting state is the finished tick, so switching the animation off leaves a
+ * drawn check rather than an empty box.
+ */
+.anim-check-draw {
+  stroke-dasharray: 22;
+  stroke-dashoffset: 0;
+  animation: check-draw 340ms var(--ease-quiet) 110ms both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .anim-rise,
   .anim-sheet,
-  .anim-fade {
+  .anim-fade,
+  .anim-toast,
+  .anim-check-ring,
+  .anim-check-draw,
+  .anim-pop {
     animation: none;
   }
 }

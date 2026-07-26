@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react"
 import type { CSSProperties } from "react"
-import { StorefrontIcon } from "@phosphor-icons/react"
 import { hourLabel, peso, rowDate, shortDate } from "../lib/format"
-import { FilterSelect } from "../components/ui"
+import { BranchTag } from "../components/ui"
 import { DateRangePicker } from "../components/DateRangePicker"
 import { SalesChart } from "../components/SalesChart"
 import type { SalesPoint } from "../components/SalesChart"
 import { StatCard } from "../components/StatCard"
 import type { Stat } from "../components/StatCard"
 import { Pagination } from "../components/Pagination"
-import { STORES, dayKey, expensesFor, grossSalesFor, visibleHourlySales } from "../lib/mock"
+import { dayKey, expensesFor, grossSalesFor, visibleHourlySales } from "../lib/mock"
+import { useSession } from "../lib/session"
 import { addDays, presetRange, rangeDays, rangeLabel, sameDay, startOfDay } from "../lib/dateRange"
 import type { DateRange } from "../lib/dateRange"
 
@@ -19,18 +19,18 @@ const rowGrid =
 const PAGE_SIZE = 20
 
 export default function DashboardPage() {
-  const [storeId, setStoreId] = useState("all")
+  const { store } = useSession()
   const [range, setRange] = useState<DateRange>(() => presetRange("today", startOfDay(new Date())))
   const [page, setPage] = useState(1)
 
   useEffect(() => {
     setPage(1)
-  }, [storeId, range])
+  }, [store.id, range])
 
   const today = startOfDay(new Date())
   const days = rangeDays(range, today)
 
-  const storeIds = storeId === "all" ? STORES.map((s) => s.id) : [storeId]
+  const storeIds = [store.id]
   const singleDay = days.length === 1
 
   let chartData: SalesPoint[] = []
@@ -58,8 +58,7 @@ export default function DashboardPage() {
   )
   const expectedTotal = grossTotal - expensesTotal
 
-  const storeLabel =
-    storeId === "all" ? "All branches" : STORES.find((s) => s.id === storeId)?.name ?? ""
+  const storeLabel = store.name
   const label = rangeLabel(range, today)
 
   const listDays: Date[] = singleDay
@@ -102,19 +101,7 @@ export default function DashboardPage() {
         className="anim-rise mt-4 flex flex-wrap items-center gap-2.5"
         style={{ "--index": 1 } as CSSProperties}
       >
-        <FilterSelect
-          ariaLabel="Branch"
-          icon={<StorefrontIcon size={15} weight="bold" aria-hidden="true" />}
-          value={storeId}
-          onChange={setStoreId}
-        >
-          <option value="all">All branches</option>
-          {STORES.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </FilterSelect>
+        <BranchTag name={store.name} />
 
         <DateRangePicker value={range} onChange={setRange} today={today} />
       </div>
