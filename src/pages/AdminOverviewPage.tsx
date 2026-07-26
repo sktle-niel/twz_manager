@@ -130,14 +130,11 @@ export default function AdminOverviewPage() {
           icon={<StorefrontIcon size={15} weight="bold" aria-hidden="true" />}
           value={storeId}
           onChange={setStoreId}
-        >
-          <option value="all">All branches</option>
-          {STORES.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </FilterSelect>
+          options={[
+            { value: "all", label: "All branches" },
+            ...STORES.map((s) => ({ value: s.id, label: s.name })),
+          ]}
+        />
 
         <DateRangePicker value={range} onChange={setRange} today={today} />
       </div>

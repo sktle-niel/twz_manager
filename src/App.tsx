@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import AppShell from "./components/AppShell"
 import AdminShell from "./components/AdminShell"
+import { SessionProvider } from "./components/SessionProvider"
 import AccountPage from "./pages/AccountPage"
 import DepositsPage from "./pages/DepositsPage"
 import ExpensesPage from "./pages/ExpensesPage"
@@ -19,8 +20,9 @@ const AdminOverviewPage = lazy(() => import("./pages/AdminOverviewPage"))
 function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<div className="min-h-[100dvh]" aria-busy="true" />}>
-        <Routes>
+      <SessionProvider>
+        <Suspense fallback={<div className="min-h-[100dvh]" aria-busy="true" />}>
+          <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
@@ -37,8 +39,9 @@ function App() {
           </Route>
           <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+          </Routes>
+        </Suspense>
+      </SessionProvider>
     </BrowserRouter>
   )
 }

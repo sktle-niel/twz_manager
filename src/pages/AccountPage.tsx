@@ -3,16 +3,18 @@ import type { CSSProperties, SubmitEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { SignOutIcon } from "@phosphor-icons/react"
 import { FormField, inputBad, inputBase, inputOk } from "../components/ui"
+import { useSession } from "../lib/session"
 
 type PasswordErrors = { current?: string; next?: string; confirm?: string }
 
 export default function AccountPage() {
   const navigate = useNavigate()
+  const { manager, store } = useSession()
 
-  // Sample profile until auth exists; issued by the owner
-  const [fullName, setFullName] = useState("Marvin Deocampo")
-  const [username, setUsername] = useState("marvin.deocampo")
-  const [email, setEmail] = useState("marvin.deocampo@gmail.com")
+  // Seeded from the signed-in account; editable until the auth backend exists
+  const [fullName, setFullName] = useState(manager.name)
+  const [username, setUsername] = useState(manager.username)
+  const [email, setEmail] = useState(manager.email)
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
 
@@ -120,7 +122,7 @@ export default function AccountPage() {
             <input
               id="account-branch"
               type="text"
-              value="Arevalo"
+              value={store.name}
               disabled
               className={`${inputBase} border-line bg-canvas text-mute disabled:cursor-not-allowed`}
             />

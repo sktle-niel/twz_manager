@@ -1,19 +1,18 @@
 import { useEffect, useState } from "react"
 import type { CSSProperties } from "react"
-import {
-  CalendarBlankIcon,
-  CheckCircleIcon,
-  FunnelIcon,
-  StorefrontIcon,
-  WarningCircleIcon,
-} from "@phosphor-icons/react"
-import { peso, rowDate, shortDate } from "../lib/format"
-import { STORES, dayAuditFor, dayKey } from "../lib/mock"
+import { CalendarBlankIcon, FunnelIcon } from "@phosphor-icons/react"
+import { peso } from "../lib/format"
+import { dayAuditFor, dayKey } from "../lib/mock"
 import type { DayStatus } from "../lib/mock"
-import { FilterSelect } from "../components/ui"
+import { BranchTag, FilterSelect } from "../components/ui"
+import { useSession } from "../lib/session"
 import { StatCard } from "../components/StatCard"
 import type { Stat } from "../components/StatCard"
 import { Pagination } from "../components/Pagination"
+import { AUDIT_COLS, AuditHeader, AuditRow } from "../components/AuditRow"
+import { ReceiptDialog } from "../components/ReceiptDialog"
+import type { ReceiptTarget } from "../components/ReceiptDialog"
+import { addDays, startOfDay } from "../lib/dateRange"
 
 type RangePreset = "last7" | "last30" | "last90" | "thisMonth" | "lastMonth" | "thisYear"
 type StatusFilter = "all" | DayStatus
@@ -27,10 +26,6 @@ const RANGES: { value: RangePreset; label: string }[] = [
   { value: "thisYear", label: "This year" },
 ]
 
-const PAGE_SIZE = 20
-/* Safety bound on how far back one view will compute */
-const MAX_SCAN_DAYS = 400
-
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All statuses" },
   { value: "matched", label: "Matched" },
@@ -39,53 +34,17 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "open", label: "Open" },
 ]
 
-function startOfDay(d: Date): Date {
-  const c = new Date(d)
-  c.setHours(0, 0, 0, 0)
-  return c
-}
-function addDays(d: Date, n: number): Date {
-  const c = new Date(d)
-  c.setDate(c.getDate() + n)
-  return c
-}
-
-function StatusChip({ status }: { status: DayStatus }) {
-  switch (status) {
-    case "matched":
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-sage px-2 py-0.5 text-[11px] font-medium text-sage-ink">
-          <CheckCircleIcon size={12} weight="fill" aria-hidden="true" />
-          Matched
-        </span>
-      )
-    case "discrepancy":
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-claret/10 px-2 py-0.5 text-[11px] font-medium text-claret">
-          <WarningCircleIcon size={12} weight="fill" aria-hidden="true" />
-          Discrepancy
-        </span>
-      )
-    case "pending":
-      return (
-        <span className="inline-flex items-center rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium text-ink-soft">
-          Pending deposit
-        </span>
-      )
-    case "open":
-      return (
-        <span className="inline-flex items-center rounded-full border border-line px-2 py-0.5 text-[11px] font-medium text-mute">
-          Open
-        </span>
-      )
-  }
-}
+const PAGE_SIZE = 20
+/* Safety bound on how far back one view will compute */
+const MAX_SCAN_DAYS = 400
 
 export default function HistoryPage() {
-  const [storeId, setStoreId] = useState("arevalo")
+  const { store } = useSession()
+  const storeId = store.id
   const [preset, setPreset] = useState<RangePreset>("last30")
   const [status, setStatus] = useState<StatusFilter>("all")
   const [page, setPage] = useState(1)
+  const [receipt, setReceipt] = useState<ReceiptTarget | null>(null)
 
   useEffect(() => {
     setPage(1)
@@ -137,7 +96,7 @@ export default function HistoryPage() {
   for (const r of allRows) counts[r.audit.status]++
   const expectedTotal = allRows.reduce((sum, r) => sum + r.audit.expected, 0)
 
-  const storeName = STORES.find((s) => s.id === storeId)?.name ?? ""
+  const storeName = store.name
 
   const summaryStats: Stat[] = [
     { label: "Matched", value: String(counts.matched) },
@@ -161,48 +120,27 @@ export default function HistoryPage() {
         className="anim-rise mt-4 flex flex-wrap items-center gap-2.5"
         style={{ "--index": 1 } as CSSProperties}
       >
-        <FilterSelect
-          ariaLabel="Branch"
-          icon={<StorefrontIcon size={15} weight="bold" aria-hidden="true" />}
-          value={storeId}
-          onChange={setStoreId}
-        >
-          {STORES.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </FilterSelect>
+        <BranchTag name={store.name} />
 
         <FilterSelect
           ariaLabel="Date range"
           icon={<CalendarBlankIcon size={15} weight="bold" aria-hidden="true" />}
           value={preset}
           onChange={(v) => setPreset(v as RangePreset)}
-        >
-          {RANGES.map((r) => (
-            <option key={r.value} value={r.value}>
-              {r.label}
-            </option>
-          ))}
-        </FilterSelect>
+          options={RANGES}
+        />
 
         <FilterSelect
           ariaLabel="Status"
           icon={<FunnelIcon size={15} weight="bold" aria-hidden="true" />}
           value={status}
           onChange={(v) => setStatus(v as StatusFilter)}
-        >
-          {STATUS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </FilterSelect>
+          options={STATUS_OPTIONS}
+        />
       </div>
 
-      {/* Day-by-day audit list, paired with the summary on wide screens */}
-      <div className="mt-5 grid items-start gap-5 xl:grid-cols-[1.7fr_1fr]">
+      {/* Audit table, paired with the summary rail on wide screens */}
+      <div className="mt-5 grid items-start gap-5 xl:grid-cols-[2fr_1fr]">
         <section
           className="anim-rise rounded-xl border border-line bg-surface"
           style={{ "--index": 2 } as CSSProperties}
@@ -214,13 +152,7 @@ export default function HistoryPage() {
           </p>
         </div>
 
-        <div className="mt-2 hidden gap-x-4 border-b border-line px-5 py-2.5 sm:grid sm:grid-cols-[1.3fr_1fr_1fr_1fr_auto]">
-          <span className="text-[12px] font-medium text-mute">Date</span>
-          <span className="text-right text-[12px] font-medium text-mute">Gross sales</span>
-          <span className="text-right text-[12px] font-medium text-mute">Expected</span>
-          <span className="text-right text-[12px] font-medium text-mute">Deposited</span>
-          <span className="text-right text-[12px] font-medium text-mute">Status</span>
-        </div>
+        <AuditHeader cols={AUDIT_COLS} withBranch={false} />
 
         {rows.length === 0 ? (
           <p className="px-5 py-10 text-center text-[14px] text-mute">
@@ -228,54 +160,37 @@ export default function HistoryPage() {
           </p>
         ) : (
           <>
-          <ul className="divide-y divide-line">
-            {pageRows.map(({ date, audit }) => (
-              <li
-                key={dayKey(date)}
-                className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1.5 px-5 py-3 sm:grid-cols-[1.3fr_1fr_1fr_1fr_auto]"
-              >
-                <span className="text-[13.5px] font-medium text-ink-soft sm:order-1">
-                  {audit.status === "open" ? `Today, ${shortDate(date)}` : rowDate(date)}
-                </span>
-                <span className="text-right text-[14px] font-semibold tabular-nums text-ink sm:order-3 sm:text-[13.5px]">
-                  {peso.format(audit.expected)}
-                </span>
-                <span className="sm:order-5 sm:justify-self-end">
-                  <StatusChip status={audit.status} />
-                </span>
-                <span className="text-right text-[12px] tabular-nums text-mute sm:order-4 sm:text-[13px]">
-                  {audit.deposited === null ? (
-                    audit.status === "open" ? (
-                      "Still open"
-                    ) : (
-                      "Not yet deposited"
-                    )
-                  ) : (
-                    <>
-                      <span className="sm:hidden">Deposited </span>
-                      {peso.format(audit.deposited)}
-                    </>
-                  )}
-                </span>
-                <span className="hidden text-right text-[13px] tabular-nums text-mute sm:order-2 sm:block">
-                  {peso.format(audit.gross)}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <Pagination
-            page={safePage}
-            pageSize={PAGE_SIZE}
-            total={rows.length}
-            onPageChange={setPage}
-            unit="days"
-          />
+            <ul className="divide-y divide-line">
+              {pageRows.map(({ date, audit }) => (
+                <AuditRow
+                  key={dayKey(date)}
+                  date={date}
+                  audit={audit}
+                  cols={AUDIT_COLS}
+                  onViewReceipt={() => setReceipt({ date, branchName: storeName, audit })}
+                />
+              ))}
+            </ul>
+            <Pagination
+              page={safePage}
+              pageSize={PAGE_SIZE}
+              total={rows.length}
+              onPageChange={setPage}
+              unit="days"
+            />
           </>
         )}
         </section>
 
-        <StatCard title="In this range" subtitle={`${storeName} branch`} stats={summaryStats} index={3} />
+        <StatCard
+          title="In this range"
+          subtitle={`${storeName} branch`}
+          stats={summaryStats}
+          index={3}
+        />
       </div>
+
+      <ReceiptDialog target={receipt} onClose={() => setReceipt(null)} />
     </>
   )
 }

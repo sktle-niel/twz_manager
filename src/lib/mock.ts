@@ -11,6 +11,7 @@ export const STORES: Store[] = [
   { id: "arevalo", name: "Arevalo" },
   { id: "molo", name: "Molo" },
   { id: "jaro", name: "Jaro" },
+  { id: "lapaz", name: "La Paz" },
 ]
 
 export type Manager = {
@@ -59,6 +60,7 @@ const BASE_DAILY: Record<string, number> = {
   arevalo: 46_000,
   molo: 31_500,
   jaro: 38_500,
+  lapaz: 35_000,
 }
 
 function hashSeed(key: string): number {
@@ -137,6 +139,12 @@ export type ExpenseItem = {
   note: string
   amount: number
   time: string
+  /* How many receipt photos are on file. Meals and merienda are company-covered
+     and logged without any; every other category carries at least one. */
+  receiptCount: number
+  /* The actual files, only for rows attached in this session — mock rows just
+     record how many exist, since there is nothing stored to hand back. */
+  receipts?: File[]
 }
 
 const OTHER_NOTES = [
@@ -168,34 +176,62 @@ function minutesOfDay(time: string): number {
   return (hour + (/pm/i.test(m[3]) ? 12 : 0)) * 60 + Number(m[2])
 }
 
-/* Individual logged expenses for a day: staff meals + merienda, occasionally one more */
+/*
+ * This many days back, the branch never logged its daily spend at all — the
+ * sample's "manager forgot" case, so the Expenses page has a real gap to flag
+ * while the day is still open for editing. Older days fall back to a seeded
+ * chance, so History shows the same situation now and then.
+ */
+const UNLOGGED_DAY = 4
+
+function dailySpendLogged(storeId: string, date: Date): boolean {
+  const diff = Math.round(
+    (startOfDay(new Date()).getTime() - startOfDay(date).getTime()) / 86_400_000,
+  )
+  if (diff === UNLOGGED_DAY) return false
+  if (diff <= DEPOSIT_TIMELINE.pendingThrough) return true
+  return mulberry32(hashSeed(`logged:${storeId}:${dayKey(date)}`))() > 0.1
+}
+
+/*
+ * Individual logged expenses for a day: staff meals + merienda and sometimes
+ * one more, plus any utility bill falling on that date. A day the branch never
+ * logged returns only its bills — possibly nothing at all.
+ */
 export function expenseItemsFor(storeId: string, date: Date): ExpenseItem[] {
   const rand = mulberry32(hashSeed(`exp:${storeId}:${dayKey(date)}`))
   const key = `${storeId}-${dayKey(date)}`
-  const items: ExpenseItem[] = [
-    {
-      id: `${key}-lunch`,
-      category: "Meals",
-      note: "Staff lunch",
-      amount: 220 + Math.round(rand() * 180),
-      time: `11:${String(30 + Math.round(rand() * 25)).padStart(2, "0")} AM`,
-    },
-    {
-      id: `${key}-merienda`,
-      category: "Merienda",
-      note: "Afternoon merienda",
-      amount: 120 + Math.round(rand() * 140),
-      time: `3:${String(10 + Math.round(rand() * 40)).padStart(2, "0")} PM`,
-    },
-  ]
-  if (rand() > 0.72) {
-    items.push({
-      id: `${key}-other`,
-      category: "Other",
-      note: OTHER_NOTES[Math.floor(rand() * OTHER_NOTES.length)],
-      amount: 250 + Math.round(rand() * 1400),
-      time: `1:${String(10 + Math.round(rand() * 40)).padStart(2, "0")} PM`,
-    })
+  const items: ExpenseItem[] = []
+
+  if (dailySpendLogged(storeId, date)) {
+    items.push(
+      {
+        id: `${key}-lunch`,
+        category: "Meals",
+        note: "Staff lunch",
+        amount: 220 + Math.round(rand() * 180),
+        time: `11:${String(30 + Math.round(rand() * 25)).padStart(2, "0")} AM`,
+        receiptCount: 0,
+      },
+      {
+        id: `${key}-merienda`,
+        category: "Merienda",
+        note: "Afternoon merienda",
+        amount: 120 + Math.round(rand() * 140),
+        time: `3:${String(10 + Math.round(rand() * 40)).padStart(2, "0")} PM`,
+        receiptCount: 0,
+      },
+    )
+    if (rand() > 0.72) {
+      items.push({
+        id: `${key}-other`,
+        category: "Other",
+        note: OTHER_NOTES[Math.floor(rand() * OTHER_NOTES.length)],
+        amount: 250 + Math.round(rand() * 1400),
+        time: `1:${String(10 + Math.round(rand() * 40)).padStart(2, "0")} PM`,
+        receiptCount: 1,
+      })
+    }
   }
 
   // Seeded separately from the daily spend so adding bills never shifts it
@@ -211,6 +247,7 @@ export function expenseItemsFor(storeId: string, date: Date): ExpenseItem[] {
       note: `${period} billing period`,
       amount: bill.min + Math.round(billRand() * bill.spread),
       time: bill.time,
+      receiptCount: 1,
     })
   }
 
@@ -234,30 +271,103 @@ export type DayAudit = {
   expenses: number
   expected: number
   deposited: number | null
+  /* Bank reference of the covering deposit; null until the day is deposited */
+  reference: string | null
   status: DayStatus
 }
 
+function referenceFor(storeId: string, key: string): string {
+  const rand = mulberry32(hashSeed(`ref:${storeId}:${key}`))
+  return String(Math.floor(rand() * 1_000_000)).padStart(6, "0")
+}
+
+function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+function addDays(d: Date, n: number): Date {
+  const c = new Date(d)
+  c.setDate(c.getDate() + n)
+  return c
+}
+
 /*
- * Reconciliation state of one audited day. Kept consistent with the
- * DepositsPage mock: the last two days are pending, days 3 and 4 back
- * were covered by one matched deposit, day 5 back was short by 180.
+ * Shape of the sample reconciliation timeline, in days back from today.
+ * Deposits, History, and the audit views all read these, so a branch that
+ * has not deposited in a while shows the same backlog everywhere.
  */
+export const DEPOSIT_TIMELINE = {
+  /* Days 1..6 are audited but still waiting for a deposit — a branch that has
+     run past the usual 3-day batching window */
+  pendingThrough: 6,
+  /* One deposit covered these two days, oldest first */
+  matchedPair: [8, 7],
+  /* This day's deposit came up short */
+  shortDay: 9,
+  shortfall: 180,
+}
+
+/* Reconciliation state of one audited day */
 export function dayAuditFor(storeId: string, date: Date): DayAudit {
   const gross = grossSalesFor(storeId, date)
   const expenses = expensesFor(storeId, date)
   const expected = gross - expenses
-  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-  const diff = Math.round((startOf(new Date()) - startOf(date)) / 86_400_000)
+  const diff = Math.round(
+    (startOfDay(new Date()).getTime() - startOfDay(date).getTime()) / 86_400_000,
+  )
 
-  if (diff <= 0) return { gross, expenses, expected, deposited: null, status: "open" }
-  if (diff <= 2) return { gross, expenses, expected, deposited: null, status: "pending" }
-  if (diff === 5) return { gross, expenses, expected, deposited: expected - 180, status: "discrepancy" }
-  if (diff === 3 || diff === 4) return { gross, expenses, expected, deposited: expected, status: "matched" }
+  if (diff <= 0)
+    return { gross, expenses, expected, deposited: null, reference: null, status: "open" }
+  if (diff <= DEPOSIT_TIMELINE.pendingThrough)
+    return { gross, expenses, expected, deposited: null, reference: null, status: "pending" }
+  if (diff === DEPOSIT_TIMELINE.shortDay)
+    return {
+      gross,
+      expenses,
+      expected,
+      deposited: expected - DEPOSIT_TIMELINE.shortfall,
+      reference: referenceFor(storeId, dayKey(date)),
+      status: "discrepancy",
+    }
+  if (DEPOSIT_TIMELINE.matchedPair.includes(diff)) {
+    // Both days were covered by one deposit, so they carry the same reference
+    const newer = addDays(date, diff - DEPOSIT_TIMELINE.matchedPair[1])
+    return {
+      gross,
+      expenses,
+      expected,
+      deposited: expected,
+      reference: referenceFor(storeId, `pair:${dayKey(newer)}`),
+      status: "matched",
+    }
+  }
 
   const rand = mulberry32(hashSeed(`status:${storeId}:${dayKey(date)}`))
+  const reference = referenceFor(storeId, dayKey(date))
   if (rand() > 0.87) {
     const shortfall = 100 + Math.round(rand() * 400)
-    return { gross, expenses, expected, deposited: expected - shortfall, status: "discrepancy" }
+    return {
+      gross,
+      expenses,
+      expected,
+      deposited: expected - shortfall,
+      reference,
+      status: "discrepancy",
+    }
   }
-  return { gross, expenses, expected, deposited: expected, status: "matched" }
+  return { gross, expenses, expected, deposited: expected, reference, status: "matched" }
+}
+
+/*
+ * Every audited day still waiting for a bank deposit, oldest first. Derived
+ * from dayAuditFor rather than assuming a fixed number of days, so however
+ * long a branch goes without depositing, all of it surfaces.
+ */
+export function pendingDepositDays(storeId: string, today: Date): Date[] {
+  const base = startOfDay(today)
+  const days: Date[] = []
+  for (let i = DEPOSIT_TIMELINE.pendingThrough; i >= 1; i--) {
+    const d = addDays(base, -i)
+    if (dayAuditFor(storeId, d).status === "pending") days.push(d)
+  }
+  return days
 }

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
-import { CameraIcon, CaretDownIcon, XIcon } from "@phosphor-icons/react"
+import { CameraIcon, StorefrontIcon, XIcon } from "@phosphor-icons/react"
+import { Select } from "./Select"
+import type { SelectOption } from "./Select"
 
 /* 16px on touch widths: WebKit zooms into focused controls below 16px */
 export const inputBase =
@@ -17,37 +19,45 @@ export const inputBad =
 export const controlClass =
   "appearance-none rounded-lg border border-line-strong bg-surface py-2 text-[16px] text-ink outline-none transition-[border-color,box-shadow] duration-200 ease-quiet focus:border-brand-deep focus:shadow-[0_0_0_2px_rgba(30,125,27,0.8)] lg:text-[14px]"
 
+/* Read-only branch indicator, shown where a manager page once had a branch
+   picker — a manager is locked to their assigned branch. */
+export function BranchTag({ name }: { name: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[14px] font-medium text-ink-soft">
+      <StorefrontIcon size={15} weight="bold" aria-hidden="true" className="text-mute" />
+      {name} branch
+    </span>
+  )
+}
+
 export function FilterSelect({
   ariaLabel,
   icon,
   value,
   onChange,
-  children,
+  options,
+  className,
+  disabled,
 }: {
   ariaLabel: string
-  icon: ReactNode
+  icon?: ReactNode
   value: string
   onChange: (value: string) => void
-  children: ReactNode
+  options: SelectOption[]
+  className?: string
+  disabled?: boolean
 }) {
   return (
-    <span className="relative inline-flex items-center">
-      <span className="pointer-events-none absolute left-3 text-mute">{icon}</span>
-      <select
-        aria-label={ariaLabel}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`${controlClass} pl-9 pr-8`}
-      >
-        {children}
-      </select>
-      <CaretDownIcon
-        size={13}
-        weight="bold"
-        aria-hidden="true"
-        className="pointer-events-none absolute right-3 text-mute"
-      />
-    </span>
+    <Select
+      variant="filter"
+      ariaLabel={ariaLabel}
+      icon={icon}
+      value={value}
+      onChange={onChange}
+      options={options}
+      className={className}
+      disabled={disabled}
+    />
   )
 }
 

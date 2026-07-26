@@ -1,6 +1,7 @@
 import { useState } from "react"
 import type { CSSProperties, SubmitEvent } from "react"
 import { Link, useNavigate } from "react-router-dom"
+import { useSession } from "../lib/session"
 import {
   BankIcon,
   ChartLineUpIcon,
@@ -21,6 +22,7 @@ const SCOPE_ROWS = [
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const { signInAs } = useSession()
   const [identifier, setIdentifier] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -49,6 +51,8 @@ export default function LoginPage() {
     // TODO: wire to the real auth API once the backend exists
     await new Promise((r) => setTimeout(r, 900))
     setSubmitting(false)
+    // Mock identity: resolve the account to its branch before entering the app
+    signInAs(identifier)
     navigate("/")
   }
 
