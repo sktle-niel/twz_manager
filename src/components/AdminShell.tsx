@@ -1,4 +1,5 @@
-import { Link, NavLink, Outlet } from "react-router-dom"
+import { useRef } from "react"
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom"
 import {
   ClockCounterClockwiseIcon,
   GearIcon,
@@ -9,6 +10,7 @@ import {
 } from "@phosphor-icons/react"
 import type { Icon } from "@phosphor-icons/react"
 import logo from "../assets/twz-logo-light.png"
+import { useRouteReveal } from "../lib/motion"
 
 const NAV: { to: string; label: string; icon: Icon; end?: boolean }[] = [
   { to: "/admin", label: "Overview", icon: SquaresFourIcon, end: true },
@@ -22,6 +24,10 @@ const NAV: { to: string; label: string; icon: Icon; end?: boolean }[] = [
 const MOBILE_TABS = NAV.slice(0, 4)
 
 export default function AdminShell() {
+  const mainRef = useRef<HTMLElement>(null)
+  const { pathname } = useLocation()
+  useRouteReveal(mainRef, pathname)
+
   return (
     <div className="min-h-[100dvh] lg:pl-60">
       {/* Desktop sidebar */}
@@ -91,7 +97,10 @@ export default function AdminShell() {
         </NavLink>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:px-8 lg:pb-16 xl:max-w-7xl 2xl:max-w-[90rem]">
+      <main
+        ref={mainRef}
+        className="mx-auto w-full max-w-5xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:px-8 lg:pb-16 xl:max-w-7xl 2xl:max-w-[90rem]"
+      >
         <Outlet />
       </main>
 

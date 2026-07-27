@@ -1,6 +1,9 @@
-import { useState } from "react"
-import type { CSSProperties, SubmitEvent } from "react"
+import { useRef, useState } from "react"
+import type { SubmitEvent } from "react"
 import { Link, useNavigate } from "react-router-dom"
+import gsap from "gsap"
+import { useGSAP } from "@gsap/react"
+import { RISE, STAGGER, prefersReducedMotion } from "../lib/motion"
 import { useSession } from "../lib/session"
 import {
   BankIcon,
@@ -29,6 +32,24 @@ export default function LoginPage() {
   const [remember, setRemember] = useState(true)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [submitting, setSubmitting] = useState(false)
+  const scopeRef = useRef<HTMLElement>(null)
+
+  /*
+   * The two panels run on their own clocks. Signing in is the task, so the
+   * form lands alongside the first line of brand copy rather than queueing
+   * behind all six of them — on mobile, where the middle of the brand panel is
+   * hidden, that is the difference between an immediate form and a dead pause.
+   */
+  useGSAP(
+    () => {
+      if (prefersReducedMotion()) return
+      gsap
+        .timeline()
+        .from("[data-rise='brand']", { ...RISE, stagger: STAGGER }, 0)
+        .from("[data-rise='form']", { ...RISE, stagger: STAGGER }, STAGGER)
+    },
+    { scope: scopeRef },
+  )
 
   function validate(): FieldErrors {
     const next: FieldErrors = {}
@@ -65,7 +86,7 @@ export default function LoginPage() {
     "border-claret/60 focus:border-claret focus:shadow-[0_0_0_2px_rgba(179,57,47,0.8)]"
 
   return (
-    <main className="relative min-h-[100dvh] lg:grid lg:grid-cols-[1.05fr_1fr]">
+    <main ref={scopeRef} className="relative min-h-[100dvh] lg:grid lg:grid-cols-[1.05fr_1fr]">
       {/* Left — brand panel (compact logo header on mobile) */}
       <section className="relative overflow-hidden lg:flex lg:flex-col lg:justify-between lg:p-14">
         {/* Quiet paper depth: fine dot grid + a soft warm light, desktop only */}
@@ -87,8 +108,8 @@ export default function LoginPage() {
         />
 
         <header
-          className="anim-rise relative flex justify-center pt-10 lg:justify-start lg:pt-0"
-          style={{ "--index": 0 } as CSSProperties}
+          className="relative flex justify-center pt-10 lg:justify-start lg:pt-0"
+          data-rise="brand"
         >
           <img
             src={logo}
@@ -100,28 +121,22 @@ export default function LoginPage() {
 
         <div className="relative hidden max-w-lg lg:block">
           <p
-            className="anim-rise font-mono text-[11px] uppercase tracking-[0.18em] text-mute"
-            style={{ "--index": 1 } as CSSProperties}
+            className="font-mono text-[11px] uppercase tracking-[0.18em] text-mute"
+            data-rise="brand"
           >
             Manager console
           </p>
           <p
-            className="anim-rise mt-4 pb-1 font-serif text-[2.75rem] font-normal leading-[1.15] tracking-[-0.02em] text-ink"
-            style={{ "--index": 2 } as CSSProperties}
+            className="mt-4 pb-1 font-serif text-[2.75rem] font-normal leading-[1.15] tracking-[-0.02em] text-ink"
+            data-rise="brand"
           >
             Run every branch from <em className="italic">one place.</em>
           </p>
-          <p
-            className="anim-rise mt-4 text-[15px] leading-relaxed text-mute"
-            style={{ "--index": 3 } as CSSProperties}
-          >
+          <p className="mt-4 text-[15px] leading-relaxed text-mute" data-rise="brand">
             Daily sales, bank deposits, and expenses for every Two Wheels Zone branch.
           </p>
 
-          <ul
-            className="anim-rise mt-10 max-w-sm space-y-2.5"
-            style={{ "--index": 4 } as CSSProperties}
-          >
+          <ul className="mt-10 max-w-sm space-y-2.5" data-rise="brand">
             {SCOPE_ROWS.map(({ label, icon: Icon }) => (
               <li key={label} className="flex items-center gap-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sage text-sage-ink">
@@ -133,10 +148,7 @@ export default function LoginPage() {
           </ul>
         </div>
 
-        <footer
-          className="anim-rise relative hidden lg:block"
-          style={{ "--index": 5 } as CSSProperties}
-        >
+        <footer className="relative hidden lg:block" data-rise="brand">
           <span className="text-[13px] text-mute">© 2026 Two Wheels Zone</span>
         </footer>
       </section>
@@ -146,8 +158,8 @@ export default function LoginPage() {
         <div className="w-full max-w-[24.5rem]">
           {/* Card chrome on mobile only; the form sits bare on the white desktop panel */}
           <div
-            className="anim-rise rounded-xl border border-line bg-surface px-6 py-7 sm:px-8 lg:border-0 lg:bg-transparent lg:p-0"
-            style={{ "--index": 1 } as CSSProperties}
+            className="rounded-xl border border-line bg-surface px-6 py-7 sm:px-8 lg:border-0 lg:bg-transparent lg:p-0"
+            data-rise="form"
           >
             <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Sign in</h1>
             <p className="mt-1 text-[14px] text-mute">Use the staff account issued to you.</p>
@@ -268,10 +280,7 @@ export default function LoginPage() {
           </div>
 
           {/* Mobile-only footer (desktop shows it in the left panel) */}
-          <p
-            className="anim-rise mt-6 text-center text-[12.5px] text-mute lg:hidden"
-            style={{ "--index": 2 } as CSSProperties}
-          >
+          <p className="mt-6 text-center text-[12.5px] text-mute lg:hidden" data-rise="form">
             © 2026 Two Wheels Zone
           </p>
         </div>

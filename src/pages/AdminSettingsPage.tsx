@@ -1,5 +1,5 @@
 import { useState } from "react"
-import type { CSSProperties, ReactNode, SubmitEvent } from "react"
+import type { ReactNode, SubmitEvent } from "react"
 import {
   CheckCircleIcon,
   PlugsConnectedIcon,
@@ -16,20 +16,15 @@ function SettingCard({
   icon: CardIcon,
   title,
   subtitle,
-  index,
   children,
 }: {
   icon: Icon
   title: string
   subtitle: string
-  index: number
   children: ReactNode
 }) {
   return (
-    <section
-      className="anim-rise rounded-xl border border-line bg-surface p-5 sm:p-6"
-      style={{ "--index": index } as CSSProperties}
-    >
+    <section className="rounded-xl border border-line bg-surface p-5 sm:p-6" data-rise>
       <div className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sage text-sage-ink">
           <CardIcon size={18} weight="bold" aria-hidden="true" />
@@ -75,7 +70,7 @@ export default function AdminSettingsPage() {
 
   return (
     <>
-      <div className="anim-rise mt-6" style={{ "--index": 0 } as CSSProperties}>
+      <div className="mt-6" data-rise>
         <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Settings</h1>
         <p className="mt-0.5 text-[13px] text-mute">
           Branches, the POS connection, and how deposits are reconciled.
@@ -88,7 +83,6 @@ export default function AdminSettingsPage() {
         icon={StorefrontIcon}
         title="Branches"
         subtitle="Stores audited in TWZ Manager. Sales are pulled from Loyverse per branch."
-        index={1}
       >
         <ul className="divide-y divide-line rounded-lg border border-line">
           {STORES.map((s) => (
@@ -108,7 +102,6 @@ export default function AdminSettingsPage() {
         icon={PlugsConnectedIcon}
         title="Loyverse POS"
         subtitle="The source of truth for daily sales in every branch."
-        index={2}
       >
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line px-4 py-3">
           <div>
@@ -143,7 +136,6 @@ export default function AdminSettingsPage() {
         icon={TagIcon}
         title="Expense categories"
         subtitle="Categories managers pick from when logging an expense."
-        index={3}
       >
         <div className="flex flex-wrap gap-2">
           {categories.map((c) => (
@@ -179,7 +171,6 @@ export default function AdminSettingsPage() {
         icon={ShieldCheckIcon}
         title="Reconciliation"
         subtitle="How the app matches bank deposits against expected amounts."
-        index={4}
       >
         <div className="flex items-start justify-between gap-3 rounded-lg border border-line px-4 py-3">
           <div>

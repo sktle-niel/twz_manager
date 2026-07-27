@@ -1,5 +1,5 @@
 import { useState } from "react"
-import type { CSSProperties, SubmitEvent } from "react"
+import type { SubmitEvent } from "react"
 import { LockIcon, LockOpenIcon, StorefrontIcon } from "@phosphor-icons/react"
 import { MANAGERS, STORES } from "../lib/mock"
 import type { Manager } from "../lib/mock"
@@ -178,7 +178,7 @@ export default function AdminManagersPage() {
 
   return (
     <>
-      <div className="anim-rise mt-6" style={{ "--index": 0 } as CSSProperties}>
+      <div className="mt-6" data-rise>
         <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Managers</h1>
         <p className="mt-0.5 text-[13px] text-mute">
           Branch manager accounts you've issued, and the branch each one is assigned to.
@@ -188,8 +188,8 @@ export default function AdminManagersPage() {
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
         {/* Team */}
         <section
-          className="anim-rise rounded-xl border border-line bg-surface"
-          style={{ "--index": 1 } as CSSProperties}
+          className="rounded-xl border border-line bg-surface"
+          data-rise
         >
           <div className="px-5 pb-1 pt-4">
             <div className="flex items-baseline justify-between">
@@ -219,8 +219,8 @@ export default function AdminManagersPage() {
 
         {/* Issue an account */}
         <section
-          className="anim-rise rounded-xl border border-line bg-surface p-5 sm:p-6"
-          style={{ "--index": 2 } as CSSProperties}
+          className="rounded-xl border border-line bg-surface p-5 sm:p-6"
+          data-rise
         >
           <h2 className="text-[15px] font-semibold text-ink">Issue an account</h2>
           <p className="mt-0.5 text-[13px] text-mute">

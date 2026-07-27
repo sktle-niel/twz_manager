@@ -1,5 +1,3 @@
-import type { CSSProperties } from "react"
-
 /*
  * Narrow summary card used as the right-hand rail beside a wide list or
  * table on large screens. Deliberately plain: label/value rows, no icons
@@ -11,18 +9,13 @@ export function StatCard({
   title,
   subtitle,
   stats,
-  index = 0,
 }: {
   title: string
   subtitle?: string
   stats: Stat[]
-  index?: number
 }) {
   return (
-    <section
-      className="anim-rise rounded-xl border border-line bg-surface"
-      style={{ "--index": index } as CSSProperties}
-    >
+    <section className="rounded-xl border border-line bg-surface" data-rise>
       <div className="px-5 pb-3 pt-4">
         <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
         {subtitle && <p className="mt-0.5 text-[13px] text-mute">{subtitle}</p>}

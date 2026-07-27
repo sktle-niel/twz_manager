@@ -1,7 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react"
 import type { KeyboardEvent, ReactNode } from "react"
 import { createPortal } from "react-dom"
+import gsap from "gsap"
+import { useGSAP } from "@gsap/react"
 import { CaretDownIcon, CheckIcon } from "@phosphor-icons/react"
+import { DUR, EASE, prefersReducedMotion } from "../lib/motion"
 
 export type SelectOption = { value: string; label: string; hint?: string }
 
@@ -24,8 +27,8 @@ const fieldTrigger =
  * Custom listbox that replaces the native <select>. Styled options, keyboard
  * navigation, and a check on the current choice — the popover is portalled to
  * the body and positioned from the trigger's measured rect, since the pages
- * that use it sit inside elements whose entry animation leaves a transform
- * behind that would otherwise trap position:fixed.
+ * that use it sit inside elements that hold a transform while their entry
+ * animation runs, which would otherwise trap position:fixed.
  */
 export function Select({
   value,
@@ -78,6 +81,27 @@ export function Select({
           },
     )
   }
+
+  /*
+   * The listbox grows from whichever edge sits against the trigger, so one
+   * that had to flip above the field opens upward out of it instead of
+   * appearing to fall through it.
+   */
+  useGSAP(
+    () => {
+      if (!anchor || !menuRef.current || prefersReducedMotion()) return
+      const below = anchor.top != null
+      gsap.from(menuRef.current, {
+        opacity: 0,
+        y: below ? -4 : 4,
+        scale: 0.98,
+        transformOrigin: below ? "top" : "bottom",
+        duration: DUR.pop,
+        ease: EASE,
+      })
+    },
+    { dependencies: [anchor], revertOnUpdate: true },
+  )
 
   // Move keyboard focus into the listbox when it opens
   useEffect(() => {
@@ -190,7 +214,7 @@ export function Select({
                 maxHeight: anchor.maxHeight,
                 ...(anchor.top != null ? { top: anchor.top } : { bottom: anchor.bottom }),
               }}
-              className="anim-pop fixed z-50 overflow-auto rounded-xl border border-line bg-surface p-1 shadow-[0_10px_30px_rgba(21,22,19,0.14)] focus:outline-none"
+              className="fixed z-50 overflow-auto rounded-xl border border-line bg-surface p-1 shadow-[0_10px_30px_rgba(21,22,19,0.14)] focus:outline-none"
             >
               {options.map((o, i) => {
                 const isSelected = o.value === value
