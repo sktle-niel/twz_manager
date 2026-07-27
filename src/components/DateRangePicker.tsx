@@ -21,6 +21,7 @@ import {
 } from "../lib/dateRange"
 import type { DateRange, PresetKey } from "../lib/dateRange"
 import { dayKey } from "../lib/mock"
+import { useSheetEnter } from "../lib/motion"
 import { controlClass } from "./ui"
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
@@ -48,6 +49,8 @@ export function DateRangePicker({
   today: Date
 }) {
   const triggerRef = useRef<HTMLSpanElement>(null)
+  const backdropRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<Draft>({ start: value.start, end: value.end })
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(value.end))
@@ -70,6 +73,8 @@ export function DateRangePicker({
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [open])
+
+  useSheetEnter(panelRef, backdropRef, open)
 
   function openPicker() {
     const rect = triggerRef.current?.getBoundingClientRect()
@@ -112,11 +117,11 @@ export function DateRangePicker({
   const atCurrentMonth =
     viewMonth.getFullYear() === today.getFullYear() && viewMonth.getMonth() === today.getMonth()
 
-  // Rendered in a portal: an ancestor's entry animation leaves a transform
-  // behind, which would otherwise trap position:fixed inside it.
+  // Rendered in a portal: an ancestor holds a transform while its entry
+  // animation runs, which would otherwise trap position:fixed inside it.
   const panelClass = isDesktop
-    ? "anim-sheet fixed z-50 overflow-y-auto rounded-xl border border-line bg-surface p-4 shadow-[0_8px_28px_rgba(21,22,19,0.12)]"
-    : "anim-sheet fixed inset-x-0 bottom-0 z-50 max-h-[88dvh] overflow-y-auto rounded-t-2xl border-t border-line bg-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+    ? "fixed z-50 overflow-y-auto rounded-xl border border-line bg-surface p-4 shadow-[0_8px_28px_rgba(21,22,19,0.12)]"
+    : "fixed inset-x-0 bottom-0 z-50 max-h-[88dvh] overflow-y-auto rounded-t-2xl border-t border-line bg-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
 
   const panelStyle =
     isDesktop && anchor
@@ -158,12 +163,14 @@ export function DateRangePicker({
         createPortal(
           <>
             <button
+              ref={backdropRef}
               type="button"
               aria-label="Close"
               onClick={() => setOpen(false)}
-              className="anim-fade fixed inset-0 z-40 cursor-default bg-ink/25 sm:bg-ink/10"
+              className="fixed inset-0 z-40 cursor-default bg-ink/25 sm:bg-ink/10"
             />
             <div
+              ref={panelRef}
               role="dialog"
               aria-modal="true"
               aria-label="Select date range"

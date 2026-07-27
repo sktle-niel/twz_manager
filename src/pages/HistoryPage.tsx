@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react"
-import type { CSSProperties } from "react"
 import { CalendarBlankIcon, FunnelIcon } from "@phosphor-icons/react"
 import { peso } from "../lib/format"
 import { dayAuditFor, dayKey } from "../lib/mock"
@@ -108,7 +107,7 @@ export default function HistoryPage() {
 
   return (
     <>
-      <div className="anim-rise mt-6" style={{ "--index": 0 } as CSSProperties}>
+      <div className="mt-6" data-rise>
         <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">History</h1>
         <p className="mt-0.5 text-[13px] text-mute">
           Every audited day and how its deposit reconciled.
@@ -117,8 +116,8 @@ export default function HistoryPage() {
 
       {/* Filters */}
       <div
-        className="anim-rise mt-4 flex flex-wrap items-center gap-2.5"
-        style={{ "--index": 1 } as CSSProperties}
+        className="mt-4 flex flex-wrap items-center gap-2.5"
+        data-rise
       >
         <BranchTag name={store.name} />
 
@@ -142,8 +141,8 @@ export default function HistoryPage() {
       {/* Audit table, paired with the summary rail on wide screens */}
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-[2fr_1fr]">
         <section
-          className="anim-rise rounded-xl border border-line bg-surface"
-          style={{ "--index": 2 } as CSSProperties}
+          className="rounded-xl border border-line bg-surface"
+          data-rise
         >
         <div className="px-5 pb-1 pt-4">
           <h2 className="text-[15px] font-semibold text-ink">{storeName} branch</h2>
@@ -186,7 +185,6 @@ export default function HistoryPage() {
           title="In this range"
           subtitle={`${storeName} branch`}
           stats={summaryStats}
-          index={3}
         />
       </div>
 

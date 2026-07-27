@@ -1,7 +1,8 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
 import { ReceiptIcon, XIcon } from "@phosphor-icons/react"
 import { peso, rowDate } from "../lib/format"
+import { useSheetEnter } from "../lib/motion"
 import type { DayAudit } from "../lib/mock"
 import { StatusChip } from "./AuditRow"
 
@@ -19,6 +20,11 @@ export function ReceiptDialog({
   target: ReceiptTarget | null
   onClose: () => void
 }) {
+  const backdropRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  useSheetEnter(panelRef, backdropRef, target)
+
   useEffect(() => {
     if (!target) return
     const onKey = (e: KeyboardEvent) => {
@@ -60,13 +66,17 @@ export function ReceiptDialog({
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
     >
       <button
+        ref={backdropRef}
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="anim-fade absolute inset-0 cursor-default bg-ink/25"
+        className="absolute inset-0 cursor-default bg-ink/25"
       />
 
-      <div className="anim-sheet relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border-t border-line bg-surface pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-xl sm:border sm:pb-0 sm:shadow-[0_8px_28px_rgba(21,22,19,0.14)]">
+      <div
+        ref={panelRef}
+        className="relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border-t border-line bg-surface pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-xl sm:border sm:pb-0 sm:shadow-[0_8px_28px_rgba(21,22,19,0.14)]"
+      >
         <div className="flex items-start justify-between gap-3 px-5 pt-4">
           <div>
             <h2 className="text-[15px] font-semibold text-ink">Deposit slip</h2>

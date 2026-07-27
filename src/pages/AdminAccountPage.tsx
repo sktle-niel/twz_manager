@@ -1,5 +1,5 @@
 import { useState } from "react"
-import type { CSSProperties, SubmitEvent } from "react"
+import type { SubmitEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { SignOutIcon } from "@phosphor-icons/react"
 import { FormField, inputBad, inputBase, inputOk } from "../components/ui"
@@ -59,7 +59,7 @@ export default function AdminAccountPage() {
 
   return (
     <>
-      <div className="anim-rise mt-6" style={{ "--index": 0 } as CSSProperties}>
+      <div className="mt-6" data-rise>
         <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Account</h1>
         <p className="mt-0.5 text-[13px] text-mute">Your owner profile and sign-in details.</p>
       </div>
@@ -67,8 +67,8 @@ export default function AdminAccountPage() {
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
         {/* Profile */}
         <section
-          className="anim-rise rounded-xl border border-line bg-surface p-5 sm:p-6"
-          style={{ "--index": 1 } as CSSProperties}
+          className="rounded-xl border border-line bg-surface p-5 sm:p-6"
+          data-rise
         >
         <h2 className="text-[15px] font-semibold text-ink">Profile</h2>
         <form onSubmit={handleProfileSubmit} noValidate className="mt-4 space-y-4">
@@ -134,8 +134,8 @@ export default function AdminAccountPage() {
 
         {/* Password */}
         <section
-          className="anim-rise rounded-xl border border-line bg-surface p-5 sm:p-6"
-          style={{ "--index": 2 } as CSSProperties}
+          className="rounded-xl border border-line bg-surface p-5 sm:p-6"
+          data-rise
         >
         <h2 className="text-[15px] font-semibold text-ink">Change password</h2>
         <form onSubmit={handlePasswordSubmit} noValidate className="mt-4 space-y-4">
@@ -196,8 +196,8 @@ export default function AdminAccountPage() {
 
         {/* Session */}
         <section
-          className="anim-rise rounded-xl border border-line bg-surface p-5 sm:p-6"
-          style={{ "--index": 3 } as CSSProperties}
+          className="rounded-xl border border-line bg-surface p-5 sm:p-6"
+          data-rise
         >
         <h2 className="text-[15px] font-semibold text-ink">Session</h2>
         <p className="mt-1 text-[13px] text-mute">

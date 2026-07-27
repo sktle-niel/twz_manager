@@ -1,5 +1,5 @@
 import { useState } from "react"
-import type { CSSProperties, SubmitEvent } from "react"
+import type { SubmitEvent } from "react"
 import { PaperclipIcon, PlusIcon, WarningCircleIcon, XIcon } from "@phosphor-icons/react"
 import { peso, rowDate, shortDate } from "../lib/format"
 import { dayKey, expenseItemsFor, pendingDepositDays } from "../lib/mock"
@@ -249,8 +249,8 @@ export default function ExpensesPage() {
   return (
     <>
       <div
-        className="anim-rise mt-6 flex flex-wrap items-center justify-between gap-3"
-        style={{ "--index": 0 } as CSSProperties}
+        className="mt-6 flex flex-wrap items-center justify-between gap-3"
+        data-rise
       >
         <div>
           <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Expenses</h1>
@@ -264,8 +264,8 @@ export default function ExpensesPage() {
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
         {/* Log expenses */}
         <section
-          className="anim-rise rounded-xl border border-line bg-surface p-5 sm:p-6"
-          style={{ "--index": 1 } as CSSProperties}
+          className="rounded-xl border border-line bg-surface p-5 sm:p-6"
+          data-rise
         >
           <h2 className="text-[15px] font-semibold text-ink">Log expenses</h2>
           <p className="mt-0.5 text-[13px] text-mute">
@@ -423,8 +423,8 @@ export default function ExpensesPage() {
 
         {/* Expenses on the selected day, and the other days still open */}
         <section
-          className="anim-rise rounded-xl border border-line bg-surface"
-          style={{ "--index": 2 } as CSSProperties}
+          className="rounded-xl border border-line bg-surface"
+          data-rise
         >
           <div className="px-5 pb-1 pt-4">
             <div className="flex items-baseline justify-between gap-3">

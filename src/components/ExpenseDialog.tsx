@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { SubmitEvent } from "react"
 import { createPortal } from "react-dom"
 import { XIcon } from "@phosphor-icons/react"
+import { useSheetEnter } from "../lib/motion"
 import type { ExpenseCategory, ExpenseItem } from "../lib/mock"
 import {
   CATEGORIES,
@@ -47,6 +48,10 @@ export function ExpenseDialog({
   const [note, setNote] = useState(item?.note ?? "")
   const [receipts, setReceipts] = useState<ReceiptEntry[]>(() => (item ? entriesFor(item) : []))
   const [errors, setErrors] = useState<FieldErrors>({})
+  const backdropRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  useSheetEnter(panelRef, backdropRef, item)
 
   useEffect(() => {
     if (!item) return
@@ -97,13 +102,17 @@ export function ExpenseDialog({
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
     >
       <button
+        ref={backdropRef}
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="anim-fade absolute inset-0 cursor-default bg-ink/25"
+        className="absolute inset-0 cursor-default bg-ink/25"
       />
 
-      <div className="anim-sheet relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border-t border-line bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-xl sm:border sm:pb-5 sm:shadow-[0_8px_28px_rgba(21,22,19,0.14)]">
+      <div
+        ref={panelRef}
+        className="relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border-t border-line bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-xl sm:border sm:pb-5 sm:shadow-[0_8px_28px_rgba(21,22,19,0.14)]"
+      >
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-[15px] font-semibold text-ink">Edit expense</h2>

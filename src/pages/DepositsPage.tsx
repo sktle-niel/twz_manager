@@ -1,5 +1,5 @@
 import { useState } from "react"
-import type { CSSProperties, SubmitEvent } from "react"
+import type { SubmitEvent } from "react"
 import { CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react"
 import { peso, rowDate, shortDate } from "../lib/format"
 import {
@@ -162,8 +162,8 @@ export default function DepositsPage() {
   return (
     <>
       <div
-        className="anim-rise mt-6 flex flex-wrap items-center justify-between gap-3"
-        style={{ "--index": 0 } as CSSProperties}
+        className="mt-6 flex flex-wrap items-center justify-between gap-3"
+        data-rise
       >
         <div>
           <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Deposits</h1>
@@ -178,8 +178,8 @@ export default function DepositsPage() {
         <div className="grid gap-5">
           {/* Days waiting for a deposit */}
           <section
-            className="anim-rise rounded-xl border border-line bg-surface"
-            style={{ "--index": 1 } as CSSProperties}
+            className="rounded-xl border border-line bg-surface"
+            data-rise
           >
         <div className="px-5 pb-1 pt-4">
           <h2 className="text-[15px] font-semibold text-ink">For deposit</h2>
@@ -245,8 +245,8 @@ export default function DepositsPage() {
 
           {/* Record the deposit */}
           <section
-            className="anim-rise rounded-xl border border-line bg-surface p-5 sm:p-6"
-            style={{ "--index": 2 } as CSSProperties}
+            className="rounded-xl border border-line bg-surface p-5 sm:p-6"
+            data-rise
           >
         <h2 className="text-[15px] font-semibold text-ink">Record a deposit</h2>
         <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-4">
@@ -353,8 +353,8 @@ export default function DepositsPage() {
 
         {/* History */}
         <section
-          className="anim-rise rounded-xl border border-line bg-surface"
-          style={{ "--index": 3 } as CSSProperties}
+          className="rounded-xl border border-line bg-surface"
+          data-rise
         >
         <div className="px-5 pb-1 pt-4">
           <h2 className="text-[15px] font-semibold text-ink">Recent deposits</h2>

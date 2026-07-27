@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react"
-import type { CSSProperties } from "react"
 import { StorefrontIcon } from "@phosphor-icons/react"
 import { hourLabel, peso, rowDate, shortDate } from "../lib/format"
 import { FilterSelect } from "../components/ui"
@@ -113,7 +112,7 @@ export default function AdminOverviewPage() {
 
   return (
     <>
-      <div className="anim-rise mt-6" style={{ "--index": 0 } as CSSProperties}>
+      <div className="mt-6" data-rise>
         <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Overview</h1>
         <p className="mt-0.5 text-[13px] text-mute">
           Sales, expenses, and expected deposits across every branch.
@@ -122,8 +121,8 @@ export default function AdminOverviewPage() {
 
       {/* Filters */}
       <div
-        className="anim-rise mt-4 flex flex-wrap items-center gap-2.5"
-        style={{ "--index": 1 } as CSSProperties}
+        className="mt-4 flex flex-wrap items-center gap-2.5"
+        data-rise
       >
         <FilterSelect
           ariaLabel="Branch"
@@ -141,8 +140,8 @@ export default function AdminOverviewPage() {
 
       {/* Gross sales for the selected range */}
       <section
-        className="anim-rise mt-5 rounded-xl border border-line bg-surface p-5"
-        style={{ "--index": 2 } as CSSProperties}
+        className="mt-5 rounded-xl border border-line bg-surface p-5"
+        data-rise
       >
         {days.length === 0 ? (
           <p className="py-10 text-center text-[14px] text-mute">
@@ -190,8 +189,8 @@ export default function AdminOverviewPage() {
       {/* Combined table, paired with the range stats on wide screens */}
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-[1.6fr_1fr]">
         <section
-          className="anim-rise rounded-xl border border-line bg-surface"
-          style={{ "--index": 3 } as CSSProperties}
+          className="rounded-xl border border-line bg-surface"
+          data-rise
         >
         <div className="px-5 pb-1 pt-4">
           <h2 className="text-[15px] font-semibold text-ink">{tableTitle}</h2>
@@ -255,7 +254,7 @@ export default function AdminOverviewPage() {
         </section>
 
         {days.length > 0 && (
-          <StatCard title="Range at a glance" stats={rangeStats} index={4} />
+          <StatCard title="Range at a glance" stats={rangeStats} />
         )}
       </div>
     </>

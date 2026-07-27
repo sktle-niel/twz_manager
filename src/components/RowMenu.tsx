@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import gsap from "gsap"
+import { useGSAP } from "@gsap/react"
 import { DotsThreeVerticalIcon } from "@phosphor-icons/react"
+import { DUR, prefersReducedMotion } from "../lib/motion"
 
 const MENU_WIDTH = 190
 const GUTTER = 8
@@ -16,13 +19,22 @@ export type RowMenuItem = {
 /*
  * Overflow menu for a table row, holding the actions that do not fit as their
  * own column. Rendered through a portal and positioned from the trigger's
- * measured rect: the rows sit inside an element whose entry animation leaves a
- * transform behind, which would otherwise trap position:fixed inside it.
+ * measured rect: the rows sit inside an element that holds a transform while
+ * its entry animation runs, which would otherwise trap position:fixed inside it.
  */
 export function RowMenu({ label, items }: { label: string; items: RowMenuItem[] }) {
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null)
   const open = anchor !== null
+
+  useGSAP(
+    () => {
+      if (!open || !menuRef.current || prefersReducedMotion()) return
+      gsap.from(menuRef.current, { opacity: 0, duration: DUR.fade, ease: "power1.out" })
+    },
+    { dependencies: [open], revertOnUpdate: true },
+  )
 
   useEffect(() => {
     if (!open) return
@@ -81,10 +93,11 @@ export function RowMenu({ label, items }: { label: string; items: RowMenuItem[] 
               className="fixed inset-0 z-50 cursor-default"
             />
             <div
+              ref={menuRef}
               role="menu"
               aria-label={label}
               style={{ top: anchor.top, left: anchor.left, width: MENU_WIDTH }}
-              className="anim-fade fixed z-50 overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-[0_8px_24px_rgba(21,22,19,0.12)]"
+              className="fixed z-50 overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-[0_8px_24px_rgba(21,22,19,0.12)]"
             >
               {items.map((item) => (
                 <button

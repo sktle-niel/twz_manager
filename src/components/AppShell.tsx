@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react"
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom"
+import { useEffect, useRef, useState } from "react"
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import {
   BankIcon,
   ClockCounterClockwiseIcon,
@@ -11,6 +11,7 @@ import {
 } from "@phosphor-icons/react"
 import type { Icon } from "@phosphor-icons/react"
 import logo from "../assets/twz-logo-light.png"
+import { useRouteReveal, useSheetEnter } from "../lib/motion"
 import { useSession } from "../lib/session"
 
 const NAV: { to: string; label: string; icon: Icon; end?: boolean }[] = [
@@ -26,6 +27,10 @@ const MOBILE_TABS = NAV.slice(0, 4)
 
 function NewEntrySheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate()
+  const backdropRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  useSheetEnter(panelRef, backdropRef, open)
 
   useEffect(() => {
     if (!open) return
@@ -50,12 +55,16 @@ function NewEntrySheet({ open, onClose }: { open: boolean; onClose: () => void }
   return (
     <div className="fixed inset-0 z-30 lg:hidden" role="dialog" aria-modal="true" aria-label="New entry">
       <button
+        ref={backdropRef}
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="anim-fade absolute inset-0 bg-ink/25"
+        className="absolute inset-0 bg-ink/25"
       />
-      <div className="anim-sheet absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-line bg-surface px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-3">
+      <div
+        ref={panelRef}
+        className="absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-line bg-surface px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-3"
+      >
         <div aria-hidden="true" className="mx-auto h-1 w-9 rounded-full bg-line" />
         <p className="mt-3 px-3 text-[13px] font-medium text-mute">New entry</p>
         <div className="mt-1 space-y-1">
@@ -95,6 +104,13 @@ function NewEntrySheet({ open, onClose }: { open: boolean; onClose: () => void }
 export default function AppShell() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const { store } = useSession()
+  const mainRef = useRef<HTMLElement>(null)
+  const { pathname } = useLocation()
+  /*
+   * The reveal lives here rather than in each page: the shell outlives the
+   * routes, so one hook keyed on the path covers all five of them.
+   */
+  useRouteReveal(mainRef, pathname)
 
   return (
     <div className="min-h-[100dvh] lg:pl-60">
@@ -165,7 +181,10 @@ export default function AppShell() {
         </NavLink>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:px-8 lg:pb-16 xl:max-w-7xl 2xl:max-w-[90rem]">
+      <main
+        ref={mainRef}
+        className="mx-auto w-full max-w-5xl px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:px-8 lg:pb-16 xl:max-w-7xl 2xl:max-w-[90rem]"
+      >
         <Outlet />
       </main>
 
