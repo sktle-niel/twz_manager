@@ -1,7 +1,7 @@
 /*
  * Where this account has been opened from: device, platform, IP, and when.
- * It sits under the status card so a manager who sees "signed in on Realme 6"
- * can check the rest of the history without leaving the dashboard.
+ * Lives on the Account page beside Session — the dashboard only calls out a
+ * sign-in from another device and links here for the full history.
  */
 import { DeviceMobileIcon, LaptopIcon } from "@phosphor-icons/react"
 import { timeAgo } from "../lib/format"
