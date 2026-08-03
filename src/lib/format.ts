@@ -21,3 +21,23 @@ export function hourLabel(h: number): string {
   if (h === 12) return "12 PM"
   return h > 12 ? `${h - 12} PM` : `${h} AM`
 }
+
+export function clockLabel(d: Date): string {
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+}
+
+/*
+ * Relative for the past week, dated after that. `now` is passed in rather than
+ * read here so the caller can freeze it and the label stays stable per render.
+ */
+export function timeAgo(d: Date, now: Date): string {
+  const mins = Math.floor((now.getTime() - d.getTime()) / 60_000)
+  if (mins < 1) return "Just now"
+  if (mins < 60) return `${mins} min ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`
+  const days = Math.floor(hours / 24)
+  if (days === 1) return `Yesterday, ${clockLabel(d)}`
+  if (days < 7) return `${days} days ago, ${clockLabel(d)}`
+  return `${shortDate(d)}, ${clockLabel(d)}`
+}

@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { hourLabel, peso, rowDate, shortDate } from "../lib/format"
 import { BranchTag } from "../components/ui"
 import { DateRangePicker } from "../components/DateRangePicker"
 import { SalesChart } from "../components/SalesChart"
 import type { SalesPoint } from "../components/SalesChart"
-import { StatCard } from "../components/StatCard"
-import type { Stat } from "../components/StatCard"
+import { NoticeCard } from "../components/NoticeCard"
+import { SignInCard } from "../components/SignInCard"
 import { Pagination } from "../components/Pagination"
-import { dayKey, expensesFor, grossSalesFor, visibleHourlySales } from "../lib/mock"
+import { dayKey, expensesFor, grossSalesFor, signInLogFor, visibleHourlySales } from "../lib/mock"
+import { branchNotices } from "../lib/notices"
 import { useSession } from "../lib/session"
 import { addDays, presetRange, rangeDays, rangeLabel, sameDay, startOfDay } from "../lib/dateRange"
 import type { DateRange } from "../lib/dateRange"
@@ -18,9 +19,17 @@ const rowGrid =
 const PAGE_SIZE = 20
 
 export default function DashboardPage() {
-  const { store } = useSession()
+  const { manager, store } = useSession()
   const [range, setRange] = useState<DateRange>(() => presetRange("today", startOfDay(new Date())))
   const [page, setPage] = useState(1)
+  /* Frozen at mount so the status rail's relative times hold still between renders */
+  const [now] = useState(() => new Date())
+
+  const notices = useMemo(
+    () => branchNotices({ storeId: store.id, managerId: manager.id, now }),
+    [store.id, manager.id, now],
+  )
+  const signIns = useMemo(() => signInLogFor(manager.id, now), [manager.id, now])
 
   useEffect(() => {
     setPage(1)
@@ -68,23 +77,6 @@ export default function DashboardPage() {
   const listTotalPages = Math.max(1, Math.ceil(listDays.length / PAGE_SIZE))
   const listPage = Math.min(page, listTotalPages)
   const pageDays = listDays.slice((listPage - 1) * PAGE_SIZE, listPage * PAGE_SIZE)
-
-  const best = chartData.reduce(
-    (top, p) => (p.amount > top.amount ? p : top),
-    chartData[0] ?? { label: "", amount: 0 },
-  )
-  const average = chartData.length ? Math.round(grossTotal / chartData.length) : 0
-  const expensesShare = grossTotal > 0 ? Math.round((expensesTotal / grossTotal) * 100) : 0
-  const rangeStats: Stat[] = [
-    { label: singleDay ? "Hours recorded" : "Days recorded", value: String(chartData.length) },
-    { label: singleDay ? "Average per hour" : "Average per day", value: peso.format(average) },
-    {
-      label: singleDay ? "Busiest hour" : "Best day",
-      value: peso.format(best.amount),
-      hint: best.label,
-    },
-    { label: "Expenses share", value: `${expensesShare}%`, hint: "of gross sales" },
-  ]
 
   return (
     <>
@@ -153,10 +145,23 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {/* Per-day summary, paired with the range stats on wide screens */}
+      {/*
+        Per-day summary, paired with the status rail on wide screens. The rail
+        comes first in the DOM so a phone gets what needs acting on before the
+        long paged list, then `order` puts it back on the right at xl.
+      */}
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-[1.6fr_1fr]">
+        <div className="grid gap-5 xl:order-2">
+          <NoticeCard
+            title="Status"
+            subtitle={`What needs attention at the ${store.name} branch.`}
+            notices={notices}
+          />
+          <SignInCard events={signIns} now={now} />
+        </div>
+
         <section
-          className="rounded-xl border border-line bg-surface"
+          className="rounded-xl border border-line bg-surface xl:order-1"
           data-rise
         >
         <div className="px-5 pb-1 pt-4">
@@ -213,10 +218,6 @@ export default function DashboardPage() {
           </>
         )}
         </section>
-
-        {days.length > 0 && (
-          <StatCard title="Range at a glance" stats={rangeStats} />
-        )}
       </div>
     </>
   )
