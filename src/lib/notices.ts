@@ -142,6 +142,8 @@ export function branchNotices({
       tone: "info",
       title: `Signed in on ${other.device}`,
       detail: `${other.ip} · ${other.place} · ${timeAgo(other.at, now)}`,
+      to: "/account",
+      action: "See every sign-in",
     })
   }
 

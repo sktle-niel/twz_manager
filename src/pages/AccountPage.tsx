@@ -1,8 +1,10 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import type { SubmitEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { SignOutIcon } from "@phosphor-icons/react"
 import { FormField, inputBad, inputBase, inputOk } from "../components/ui"
+import { SignInCard } from "../components/SignInCard"
+import { signInLogFor } from "../lib/mock"
 import { useSession } from "../lib/session"
 
 type PasswordErrors = { current?: string; next?: string; confirm?: string }
@@ -24,6 +26,10 @@ export default function AccountPage() {
   const [passwordErrors, setPasswordErrors] = useState<PasswordErrors>({})
   const [passwordSaving, setPasswordSaving] = useState(false)
   const [passwordSaved, setPasswordSaved] = useState(false)
+
+  /* Frozen at mount so the sign-in log's relative times hold still between renders */
+  const [now] = useState(() => new Date())
+  const signIns = useMemo(() => signInLogFor(manager.id, now), [manager.id, now])
 
   async function handleProfileSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -209,7 +215,8 @@ export default function AccountPage() {
         >
         <h2 className="text-[15px] font-semibold text-ink">Session</h2>
         <p className="mt-1 text-[13px] text-mute">
-          Signing out returns you to the sign-in screen on this device.
+          Signing out returns you to the sign-in screen on this device. Any other device stays
+          signed in.
         </p>
         <button
           type="button"
@@ -220,6 +227,9 @@ export default function AccountPage() {
           Sign out
         </button>
         </section>
+
+        {/* Pairs with Session on the second row of the 2×2 grid */}
+        <SignInCard events={signIns} now={now} />
       </div>
     </>
   )

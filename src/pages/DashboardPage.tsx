@@ -5,9 +5,8 @@ import { DateRangePicker } from "../components/DateRangePicker"
 import { SalesChart } from "../components/SalesChart"
 import type { SalesPoint } from "../components/SalesChart"
 import { NoticeCard } from "../components/NoticeCard"
-import { SignInCard } from "../components/SignInCard"
 import { Pagination } from "../components/Pagination"
-import { dayKey, expensesFor, grossSalesFor, signInLogFor, visibleHourlySales } from "../lib/mock"
+import { dayKey, expensesFor, grossSalesFor, visibleHourlySales } from "../lib/mock"
 import { branchNotices } from "../lib/notices"
 import { useSession } from "../lib/session"
 import { addDays, presetRange, rangeDays, rangeLabel, sameDay, startOfDay } from "../lib/dateRange"
@@ -29,7 +28,6 @@ export default function DashboardPage() {
     () => branchNotices({ storeId: store.id, managerId: manager.id, now }),
     [store.id, manager.id, now],
   )
-  const signIns = useMemo(() => signInLogFor(manager.id, now), [manager.id, now])
 
   useEffect(() => {
     setPage(1)
@@ -151,13 +149,12 @@ export default function DashboardPage() {
         long paged list, then `order` puts it back on the right at xl.
       */}
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-[1.6fr_1fr]">
-        <div className="grid gap-5 xl:order-2">
+        <div className="xl:order-2">
           <NoticeCard
             title="Status"
             subtitle={`What needs attention at the ${store.name} branch.`}
             notices={notices}
           />
-          <SignInCard events={signIns} now={now} />
         </div>
 
         <section
