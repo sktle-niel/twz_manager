@@ -371,3 +371,68 @@ export function pendingDepositDays(storeId: string, today: Date): Date[] {
   }
   return days
 }
+
+export type SignInDeviceKind = "phone" | "computer"
+
+export type SignInEvent = {
+  id: string
+  device: string
+  platform: string
+  kind: SignInDeviceKind
+  ip: string
+  place: string
+  at: Date
+  /* The session reading the page right now */
+  current: boolean
+}
+
+/*
+ * Which devices have opened one manager's account. Seeded from the account id
+ * like every other figure here, so a manager always sees the same history.
+ * The real list will come from the auth backend's session records — device,
+ * IP, and time are exactly what it will hand back.
+ */
+const SIGN_IN_DEVICES: { device: string; platform: string; kind: SignInDeviceKind }[] = [
+  { device: "Realme 6", platform: "Android 11 · Chrome 124", kind: "phone" },
+  { device: "Windows laptop", platform: "Windows 11 · Edge 126", kind: "computer" },
+  { device: "Redmi Note 12", platform: "Android 13 · Chrome 125", kind: "phone" },
+  { device: "iPhone 11", platform: "iOS 17 · Safari", kind: "phone" },
+]
+
+const SIGN_IN_IPS = ["112.198.104.77", "180.190.23.14", "119.94.61.202", "203.177.42.9"]
+/* Coarse GeoIP areas, deliberately not branch names — where a device signed
+   in from says nothing about which branch the account belongs to */
+const SIGN_IN_PLACES = ["Iloilo City, PH", "Mandurriao, Iloilo", "Pavia, Iloilo", "Oton, Iloilo"]
+
+export function signInLogFor(managerId: string, now: Date): SignInEvent[] {
+  const rand = mulberry32(hashSeed(`signin:${managerId}`))
+  const start = Math.floor(rand() * SIGN_IN_DEVICES.length)
+  /*
+   * Minutes between one sign-in and the next, walking back from now: the
+   * current session first, then the sign-in from another device a few hours
+   * before it — recent enough that the dashboard still calls it out.
+   */
+  const gaps = [
+    25 + Math.round(rand() * 150),
+    4 * 60 + Math.round(rand() * 600),
+    26 * 60 + Math.round(rand() * 900),
+    50 * 60 + Math.round(rand() * 1200),
+  ]
+
+  let minutes = 0
+  return SIGN_IN_DEVICES.map((_, i) => {
+    minutes += gaps[i]
+    const slot = (start + i) % SIGN_IN_DEVICES.length
+    const device = SIGN_IN_DEVICES[slot]
+    return {
+      id: `${managerId}-signin-${i}`,
+      device: device.device,
+      platform: device.platform,
+      kind: device.kind,
+      ip: SIGN_IN_IPS[slot],
+      place: SIGN_IN_PLACES[slot],
+      at: new Date(now.getTime() - minutes * 60_000),
+      current: i === 0,
+    }
+  })
+}

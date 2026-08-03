@@ -5,8 +5,7 @@ import { FilterSelect } from "../components/ui"
 import { DateRangePicker } from "../components/DateRangePicker"
 import { SalesChart } from "../components/SalesChart"
 import type { SalesPoint } from "../components/SalesChart"
-import { StatCard } from "../components/StatCard"
-import type { Stat } from "../components/StatCard"
+import { BranchSalesCard } from "../components/BranchSalesCard"
 import { Pagination } from "../components/Pagination"
 import { STORES, dayKey, expensesFor, grossSalesFor, visibleHourlySales } from "../lib/mock"
 import { presetRange, rangeDays, rangeLabel, sameDay, startOfDay } from "../lib/dateRange"
@@ -86,29 +85,16 @@ export default function AdminOverviewPage() {
     ? "Gross sales, expenses, and expected deposit per branch."
     : "Gross sales, expenses, and expected deposit per day."
 
-  const best = chartData.reduce(
-    (top, p) => (p.amount > top.amount ? p : top),
-    chartData[0] ?? { label: "", amount: 0 },
-  )
-  const average = chartData.length ? Math.round(grossTotal / chartData.length) : 0
-  const expensesShare = grossTotal > 0 ? Math.round((expensesTotal / grossTotal) * 100) : 0
-  const topBranch =
-    allBranches && tableRows.length > 0
-      ? tableRows.reduce((top, r) => (r.gross > top.gross ? r : top), tableRows[0])
-      : null
-  const rangeStats: Stat[] = [
-    { label: singleDay ? "Hours recorded" : "Days recorded", value: String(chartData.length) },
-    { label: singleDay ? "Average per hour" : "Average per day", value: peso.format(average) },
-    {
-      label: singleDay ? "Busiest hour" : "Best day",
-      value: peso.format(best.amount),
-      hint: best.label,
-    },
-    ...(topBranch
-      ? [{ label: "Top branch", value: peso.format(topBranch.gross), hint: topBranch.label }]
-      : []),
-    { label: "Expenses share", value: `${expensesShare}%`, hint: "of gross sales" },
-  ]
+  /*
+   * The rail ranks every branch regardless of the branch filter — comparing
+   * them is the whole point, so filtering to one only marks it in the list.
+   */
+  const branchSales = STORES.map((s) => ({
+    id: s.id,
+    name: s.name,
+    amount: days.reduce((sum, d) => sum + grossSalesFor(s.id, d), 0),
+  })).sort((a, b) => b.amount - a.amount)
+  const branchSalesTotal = branchSales.reduce((sum, r) => sum + r.amount, 0)
 
   return (
     <>
@@ -186,10 +172,26 @@ export default function AdminOverviewPage() {
         )}
       </section>
 
-      {/* Combined table, paired with the range stats on wide screens */}
+      {/*
+        Combined table, paired with the branch ranking on wide screens. The
+        ranking leads on a phone: it answers "who earned what today" without
+        paging through the table.
+      */}
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-[1.6fr_1fr]">
+        {days.length > 0 && (
+          <div className="xl:order-2">
+            <BranchSalesCard
+              title="Sales by branch"
+              subtitle={`${label} · gross sales, highest first.`}
+              rows={branchSales}
+              total={branchSalesTotal}
+              highlightId={allBranches ? null : storeId}
+            />
+          </div>
+        )}
+
         <section
-          className="rounded-xl border border-line bg-surface"
+          className="rounded-xl border border-line bg-surface xl:order-1"
           data-rise
         >
         <div className="px-5 pb-1 pt-4">
@@ -252,10 +254,6 @@ export default function AdminOverviewPage() {
           </>
         )}
         </section>
-
-        {days.length > 0 && (
-          <StatCard title="Range at a glance" stats={rangeStats} />
-        )}
       </div>
     </>
   )
