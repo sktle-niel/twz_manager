@@ -12,7 +12,6 @@ import {
 import type { Icon } from "@phosphor-icons/react"
 import logo from "../assets/twz-logo-light.png"
 import { useRouteReveal, useSheetEnter } from "../lib/motion"
-import { useSession } from "../lib/session"
 
 const NAV: { to: string; label: string; icon: Icon; end?: boolean }[] = [
   { to: "/", label: "Dashboard", icon: SquaresFourIcon, end: true },
@@ -103,7 +102,6 @@ function NewEntrySheet({ open, onClose }: { open: boolean; onClose: () => void }
 
 export default function AppShell() {
   const [sheetOpen, setSheetOpen] = useState(false)
-  const { store } = useSession()
   const mainRef = useRef<HTMLElement>(null)
   const { pathname } = useLocation()
   /*
@@ -117,13 +115,10 @@ export default function AppShell() {
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 border-r border-line bg-canvas lg:block">
         <div className="flex h-full flex-col p-4">
-          <div className="flex items-center gap-2 px-2 pt-1">
+          <div className="flex items-center px-2 pt-1">
             <Link to="/" className="inline-flex">
               <img src={logo} alt="Two Wheels Zone" className="h-8 w-auto select-none" draggable={false} />
             </Link>
-            <span className="rounded-full bg-sage px-2 py-0.5 text-[10.5px] font-medium text-sage-ink">
-              {store.name}
-            </span>
           </div>
           <nav aria-label="Primary" className="mt-8 space-y-1">
             {NAV.map(({ to, label, icon: NavIcon, end }) => (
