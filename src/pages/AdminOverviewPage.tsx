@@ -7,8 +7,10 @@ import { SalesChart } from "../components/SalesChart"
 import type { SalesPoint } from "../components/SalesChart"
 import { BranchSalesCard } from "../components/BranchSalesCard"
 import { Pagination } from "../components/Pagination"
-import { STORES, dayKey, expensesFor, grossSalesFor, visibleHourlySales } from "../lib/mock"
-import { presetRange, rangeDays, rangeLabel, sameDay, startOfDay } from "../lib/dateRange"
+import { api } from "../lib/api"
+import { useApi } from "../lib/useApi"
+import { useSession } from "../lib/session"
+import { dayKey, presetRange, rangeDays, rangeLabel, sameDay, startOfDay } from "../lib/dateRange"
 import type { DateRange } from "../lib/dateRange"
 
 const rowGrid =
@@ -17,6 +19,7 @@ const rowGrid =
 const PAGE_SIZE = 20
 
 export default function AdminOverviewPage() {
+  const { stores } = useSession()
   const [storeId, setStoreId] = useState("all")
   const [range, setRange] = useState<DateRange>(() => presetRange("today", startOfDay(new Date())))
   const [page, setPage] = useState(1)
@@ -29,51 +32,59 @@ export default function AdminOverviewPage() {
   const days = rangeDays(range, today)
 
   const allBranches = storeId === "all"
-  const storeIds = allBranches ? STORES.map((s) => s.id) : [storeId]
+  const storeIds = allBranches ? stores.map((s) => s.id) : [storeId]
   const singleDay = days.length === 1
-  const scopeLabel = allBranches ? "All branches" : STORES.find((s) => s.id === storeId)?.name ?? ""
+  const scopeLabel = allBranches ? "All branches" : stores.find((s) => s.id === storeId)?.name ?? ""
 
-  let chartData: SalesPoint[] = []
-  if (singleDay) {
-    const perStore = storeIds.map((id) => visibleHourlySales(id, days[0]))
-    const len = perStore[0]?.length ?? 0
-    chartData = Array.from({ length: len }, (_, i) => ({
-      label: hourLabel(perStore[0][i].hour),
-      amount: perStore.reduce((sum, list) => sum + list[i].amount, 0),
-    }))
-  } else {
-    chartData = days.map((d) => ({
-      label: shortDate(d),
-      amount: storeIds.reduce((sum, id) => sum + grossSalesFor(id, d), 0),
-    }))
-  }
+  /* Always every branch: the rail ranks them all, and the table is a filter
+     over the same rows rather than a second query */
+  const from = dayKey(days[0] ?? today)
+  const to = dayKey(days[days.length - 1] ?? today)
+  const allIds = stores.map((s) => s.id).join(",")
+  const sales = useApi(
+    () => api.dailySales(allIds.split(","), { from, to }),
+    [allIds, from, to],
+  )
+  const hourly = useApi(
+    () => (singleDay ? api.hourlySales(storeIds, dayKey(days[0])) : Promise.resolve([])),
+    [storeIds.join(","), singleDay, singleDay ? dayKey(days[0]) : ""],
+  )
 
-  const grossTotal = days.reduce(
-    (sum, d) => sum + storeIds.reduce((s, id) => s + grossSalesFor(id, d), 0),
-    0,
-  )
-  const expensesTotal = days.reduce(
-    (sum, d) => sum + storeIds.reduce((s, id) => s + expensesFor(id, d), 0),
-    0,
-  )
+  const rows = sales.data ?? []
+  const inScope = rows.filter((r) => storeIds.includes(r.storeId))
+  const perDay = new Map<string, number>()
+  for (const r of inScope) perDay.set(r.day, (perDay.get(r.day) ?? 0) + r.gross)
+
+  const chartData: SalesPoint[] = singleDay
+    ? (hourly.data ?? []).map((p) => ({ label: hourLabel(p.hour), amount: p.amount }))
+    : days.map((d) => ({ label: shortDate(d), amount: perDay.get(dayKey(d)) ?? 0 }))
+
+  const grossTotal = inScope.reduce((sum, r) => sum + r.gross, 0)
+  const expensesTotal = inScope.reduce((sum, r) => sum + r.expenses, 0)
   const expectedTotal = grossTotal - expensesTotal
 
   const label = rangeLabel(range, today)
 
   // All branches -> one row per branch; a single branch -> one row per day
   const tableRows = allBranches
-    ? STORES.map((s) => ({
-        key: s.id,
-        label: s.name,
-        gross: days.reduce((sum, d) => sum + grossSalesFor(s.id, d), 0),
-        expenses: days.reduce((sum, d) => sum + expensesFor(s.id, d), 0),
-      }))
-    : [...days].reverse().map((d) => ({
-        key: dayKey(d),
-        label: sameDay(d, today) ? `Today, ${shortDate(d)}` : rowDate(d),
-        gross: grossSalesFor(storeId, d),
-        expenses: expensesFor(storeId, d),
-      }))
+    ? stores.map((s) => {
+        const mine = rows.filter((r) => r.storeId === s.id)
+        return {
+          key: s.id,
+          label: s.name,
+          gross: mine.reduce((sum, r) => sum + r.gross, 0),
+          expenses: mine.reduce((sum, r) => sum + r.expenses, 0),
+        }
+      })
+    : [...days].reverse().map((d) => {
+        const row = rows.find((r) => r.storeId === storeId && r.day === dayKey(d))
+        return {
+          key: dayKey(d),
+          label: sameDay(d, today) ? `Today, ${shortDate(d)}` : rowDate(d),
+          gross: row?.gross ?? 0,
+          expenses: row?.expenses ?? 0,
+        }
+      })
 
   const tableTotalPages = Math.max(1, Math.ceil(tableRows.length / PAGE_SIZE))
   const tablePage = Math.min(page, tableTotalPages)
@@ -89,11 +100,13 @@ export default function AdminOverviewPage() {
    * The rail ranks every branch regardless of the branch filter — comparing
    * them is the whole point, so filtering to one only marks it in the list.
    */
-  const branchSales = STORES.map((s) => ({
-    id: s.id,
-    name: s.name,
-    amount: days.reduce((sum, d) => sum + grossSalesFor(s.id, d), 0),
-  })).sort((a, b) => b.amount - a.amount)
+  const branchSales = stores
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      amount: rows.filter((r) => r.storeId === s.id).reduce((sum, r) => sum + r.gross, 0),
+    }))
+    .sort((a, b) => b.amount - a.amount)
   const branchSalesTotal = branchSales.reduce((sum, r) => sum + r.amount, 0)
 
   return (
@@ -117,7 +130,7 @@ export default function AdminOverviewPage() {
           onChange={setStoreId}
           options={[
             { value: "all", label: "All branches" },
-            ...STORES.map((s) => ({ value: s.id, label: s.name })),
+            ...stores.map((s) => ({ value: s.id, label: s.name })),
           ]}
         />
 

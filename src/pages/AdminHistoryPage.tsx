@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react"
 import { CalendarBlankIcon, FunnelIcon, StorefrontIcon } from "@phosphor-icons/react"
 import { peso } from "../lib/format"
-import { STORES, dayAuditFor, dayKey } from "../lib/mock"
-import type { DayAudit, DayStatus, Store } from "../lib/mock"
+import { api } from "../lib/api"
+import type { DayAudit, DayStatus, Store } from "../lib/api"
+import { useApi } from "../lib/useApi"
+import { useSession } from "../lib/session"
 import { FilterSelect } from "../components/ui"
 import { StatCard } from "../components/StatCard"
 import type { Stat } from "../components/StatCard"
@@ -10,7 +12,7 @@ import { Pagination } from "../components/Pagination"
 import { AUDIT_COLS, AUDIT_COLS_BRANCH, AuditHeader, AuditRow } from "../components/AuditRow"
 import { ReceiptDialog } from "../components/ReceiptDialog"
 import type { ReceiptTarget } from "../components/ReceiptDialog"
-import { addDays, startOfDay } from "../lib/dateRange"
+import { addDays, dayKey, fromDayKey, startOfDay } from "../lib/dateRange"
 
 type RangePreset = "last7" | "last30" | "last90" | "thisMonth" | "lastMonth" | "thisYear"
 type StatusFilter = "all" | DayStatus
@@ -37,6 +39,7 @@ const PAGE_SIZE = 20
 const MAX_ROWS = 2000
 
 export default function AdminHistoryPage() {
+  const { stores } = useSession()
   const [storeId, setStoreId] = useState("all")
   const [preset, setPreset] = useState<RangePreset>("last30")
   const [status, setStatus] = useState<StatusFilter>("all")
@@ -79,20 +82,29 @@ export default function AdminHistoryPage() {
   }
 
   const allBranches = storeId === "all"
-  const scopeStores = allBranches ? STORES : STORES.filter((s) => s.id === storeId)
+  const scopeStores = allBranches ? stores : stores.filter((s) => s.id === storeId)
+  const scopeIds = scopeStores.map((s) => s.id).join(",")
 
-  const allRows: { key: string; date: Date; store: Store; audit: DayAudit }[] = []
-  for (let d = end; d >= start && allRows.length < MAX_ROWS; d = addDays(d, -1)) {
-    for (const store of scopeStores) {
-      allRows.push({
-        key: `${store.id}:${dayKey(d)}`,
-        date: d,
-        store,
-        audit: dayAuditFor(store.id, d),
-      })
-      if (allRows.length >= MAX_ROWS) break
-    }
-  }
+  const from = dayKey(start)
+  const to = dayKey(end)
+  /* One request covering every branch in scope, rather than a call per branch
+     per day; MAX_ROWS then bounds what this view will draw */
+  const audits = useApi(
+    () => api.dayAudits(scopeIds ? scopeIds.split(",") : [], { from, to }),
+    [scopeIds, from, to],
+  )
+
+  const byStore = new Map<string, Store>(stores.map((s) => [s.id, s]))
+  const allRows = [...(audits.data ?? [])]
+    .sort((a, b) => (a.day === b.day ? a.storeId.localeCompare(b.storeId) : a.day < b.day ? 1 : -1))
+    .slice(0, MAX_ROWS)
+    .map((audit) => ({
+      key: `${audit.storeId}:${audit.day}`,
+      date: fromDayKey(audit.day),
+      store: byStore.get(audit.storeId) as Store,
+      audit: audit as DayAudit,
+    }))
+    .filter((r) => r.store)
   const rows = allRows.filter((r) => status === "all" || r.audit.status === status)
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
@@ -104,7 +116,7 @@ export default function AdminHistoryPage() {
   for (const r of allRows) counts[r.audit.status]++
   const expectedTotal = allRows.reduce((sum, r) => sum + r.audit.expected, 0)
 
-  const scopeLabel = allBranches ? "All branches" : STORES.find((s) => s.id === storeId)?.name ?? ""
+  const scopeLabel = allBranches ? "All branches" : byStore.get(storeId)?.name ?? ""
   const cols = allBranches ? AUDIT_COLS_BRANCH : AUDIT_COLS
 
   const summaryStats: Stat[] = [
@@ -136,7 +148,7 @@ export default function AdminHistoryPage() {
           onChange={setStoreId}
           options={[
             { value: "all", label: "All branches" },
-            ...STORES.map((s) => ({ value: s.id, label: s.name })),
+            ...stores.map((s) => ({ value: s.id, label: s.name })),
           ]}
         />
 

@@ -1,35 +1,39 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import type { SubmitEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { SignOutIcon } from "@phosphor-icons/react"
 import { FormField, inputBad, inputBase, inputOk } from "../components/ui"
+import { AvatarField } from "../components/AvatarField"
 import { SignInCard } from "../components/SignInCard"
-import { signInLogFor } from "../lib/mock"
+import { api } from "../lib/api"
+import { useApi } from "../lib/useApi"
 import { useSession } from "../lib/session"
+import { useToast } from "../lib/toast"
 
 type PasswordErrors = { current?: string; next?: string; confirm?: string }
 
 export default function AccountPage() {
   const navigate = useNavigate()
   const { manager, store } = useSession()
+  const { showToast } = useToast()
 
   // Seeded from the signed-in account; editable until the auth backend exists
   const [fullName, setFullName] = useState(manager.name)
   const [username, setUsername] = useState(manager.username)
   const [email, setEmail] = useState(manager.email)
+  /* Optional: with none attached the avatar falls back to the account's initials */
+  const [photo, setPhoto] = useState<File | null>(null)
   const [profileSaving, setProfileSaving] = useState(false)
-  const [profileSaved, setProfileSaved] = useState(false)
 
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [passwordErrors, setPasswordErrors] = useState<PasswordErrors>({})
   const [passwordSaving, setPasswordSaving] = useState(false)
-  const [passwordSaved, setPasswordSaved] = useState(false)
 
   /* Frozen at mount so the sign-in log's relative times hold still between renders */
   const [now] = useState(() => new Date())
-  const signIns = useMemo(() => signInLogFor(manager.id, now), [manager.id, now])
+  const signIns = useApi(() => api.signIns(manager.id), [manager.id])
 
   async function handleProfileSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -37,8 +41,7 @@ export default function AccountPage() {
     // TODO: send to the real API once the backend exists
     await new Promise((r) => setTimeout(r, 600))
     setProfileSaving(false)
-    setProfileSaved(true)
-    window.setTimeout(() => setProfileSaved(false), 3000)
+    showToast("Profile saved.")
   }
 
   async function handlePasswordSubmit(e: SubmitEvent<HTMLFormElement>) {
@@ -58,8 +61,7 @@ export default function AccountPage() {
     setNewPassword("")
     setConfirmPassword("")
     setPasswordSaving(false)
-    setPasswordSaved(true)
-    window.setTimeout(() => setPasswordSaved(false), 3000)
+    showToast("Password updated.")
   }
 
   const submitClass =
@@ -82,6 +84,13 @@ export default function AccountPage() {
         >
         <h2 className="text-[15px] font-semibold text-ink">Profile</h2>
         <form onSubmit={handleProfileSubmit} noValidate className="mt-4 space-y-4">
+          <AvatarField
+            id="account-photo"
+            name={fullName}
+            file={photo}
+            onChange={setPhoto}
+            hint="Optional — your initials stand in without one."
+          />
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField id="account-name" label="Full name">
               <input
@@ -133,15 +142,10 @@ export default function AccountPage() {
               className={`${inputBase} border-line bg-canvas text-mute disabled:cursor-not-allowed`}
             />
           </FormField>
-          <div className="flex items-center gap-3 pt-1">
+          <div className="pt-1">
             <button type="submit" disabled={profileSaving} className={submitClass}>
               {profileSaving ? "Saving" : "Save changes"}
             </button>
-            {profileSaved && (
-              <p role="status" className="text-[13px] font-medium text-sage-ink">
-                Changes saved.
-              </p>
-            )}
           </div>
         </form>
       </section>
@@ -195,15 +199,10 @@ export default function AccountPage() {
               />
             </FormField>
           </div>
-          <div className="flex items-center gap-3 pt-1">
+          <div className="pt-1">
             <button type="submit" disabled={passwordSaving} className={submitClass}>
               {passwordSaving ? "Updating" : "Update password"}
             </button>
-            {passwordSaved && (
-              <p role="status" className="text-[13px] font-medium text-sage-ink">
-                Password updated.
-              </p>
-            )}
           </div>
         </form>
       </section>
@@ -220,7 +219,10 @@ export default function AccountPage() {
         </p>
         <button
           type="button"
-          onClick={() => navigate("/login")}
+          onClick={() => {
+            navigate("/login")
+            showToast("Signed out.")
+          }}
           className="mt-4 flex h-11 items-center justify-center gap-2 rounded-lg border border-line-strong px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
         >
           <SignOutIcon size={17} aria-hidden="true" />
@@ -229,7 +231,7 @@ export default function AccountPage() {
         </section>
 
         {/* Pairs with Session on the second row of the 2×2 grid */}
-        <SignInCard events={signIns} now={now} />
+        <SignInCard events={signIns.data ?? []} now={now} loading={signIns.loading} />
       </div>
     </>
   )

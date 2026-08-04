@@ -3,7 +3,7 @@ import { createPortal } from "react-dom"
 import { ReceiptIcon, XIcon } from "@phosphor-icons/react"
 import { peso, rowDate } from "../lib/format"
 import { useSheetEnter } from "../lib/motion"
-import type { DayAudit } from "../lib/mock"
+import type { DayAudit } from "../lib/api"
 import { StatusChip } from "./AuditRow"
 
 export type ReceiptTarget = { date: Date; branchName: string; audit: DayAudit }

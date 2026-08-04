@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
-import { CameraIcon, StorefrontIcon, XIcon } from "@phosphor-icons/react"
+import { CameraIcon, ImageSquareIcon, StorefrontIcon, XIcon } from "@phosphor-icons/react"
 import { Select } from "./Select"
 import type { SelectOption } from "./Select"
 
@@ -97,6 +97,9 @@ export function PhotoAttach({
   file,
   onChange,
   error,
+  /* Given a handler, the field offers to shoot the photo in the app rather
+     than only accepting one already in the gallery */
+  onCapture,
 }: {
   id: string
   label: string
@@ -104,6 +107,7 @@ export function PhotoAttach({
   file: File | null
   onChange: (file: File | null) => void
   error?: string
+  onCapture?: () => void
 }) {
   const [preview, setPreview] = useState<string | null>(null)
 
@@ -139,6 +143,15 @@ export function PhotoAttach({
               {Math.max(1, Math.round(file.size / 1024))} KB
             </span>
           </span>
+          {onCapture && (
+            <button
+              type="button"
+              onClick={onCapture}
+              className="rounded-md px-2 py-1.5 text-[13px] font-medium text-brand-deep underline-offset-4 hover:underline"
+            >
+              Retake
+            </button>
+          )}
           <label
             htmlFor={id}
             className="cursor-pointer rounded-md px-2 py-1.5 text-[13px] font-medium text-brand-deep underline-offset-4 hover:underline"
@@ -154,6 +167,28 @@ export function PhotoAttach({
             <XIcon size={16} weight="bold" aria-hidden="true" />
           </button>
         </div>
+      ) : onCapture ? (
+        /* Shooting it here is the path that gets a usable photo, so it leads;
+           the gallery stays available for a slip already photographed */
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={onCapture}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg border px-3.5 py-3 text-[14px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03] ${
+              error ? "border-claret/60" : "border-line-strong"
+            }`}
+          >
+            <CameraIcon size={19} weight="bold" aria-hidden="true" />
+            Take photo
+          </button>
+          <label
+            htmlFor={id}
+            className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-line-strong px-3.5 py-3 text-[14px] font-medium text-ink-soft transition-colors duration-200 ease-quiet hover:border-mute peer-focus-visible:border-brand-deep peer-focus-visible:shadow-[0_0_0_2px_rgba(30,125,27,0.8)]"
+          >
+            <ImageSquareIcon size={19} aria-hidden="true" className="text-mute" />
+            From gallery
+          </label>
+        </div>
       ) : (
         <label
           htmlFor={id}
@@ -167,6 +202,9 @@ export function PhotoAttach({
             {hint && <span className="block text-[12px] text-mute">{hint}</span>}
           </span>
         </label>
+      )}
+      {onCapture && hint && !error && !file && (
+        <p className="mt-1.5 text-[12.5px] text-mute">{hint}</p>
       )}
       {error && (
         <p id={`${id}-error`} role="alert" className="mt-1.5 text-[13px] text-claret">

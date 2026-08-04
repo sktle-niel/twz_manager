@@ -2,7 +2,9 @@ import { Suspense, lazy } from "react"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import AppShell from "./components/AppShell"
 import AdminShell from "./components/AdminShell"
+import { ScrollToTop } from "./components/ScrollToTop"
 import { SessionProvider } from "./components/SessionProvider"
+import { ToastProvider } from "./components/ToastProvider"
 import AccountPage from "./pages/AccountPage"
 import DepositsPage from "./pages/DepositsPage"
 import ExpensesPage from "./pages/ExpensesPage"
@@ -20,7 +22,10 @@ const AdminOverviewPage = lazy(() => import("./pages/AdminOverviewPage"))
 function App() {
   return (
     <BrowserRouter>
-      <SessionProvider>
+      {/* Above the routes so it covers both shells and the login page at once */}
+      <ScrollToTop />
+      <ToastProvider>
+        <SessionProvider>
         <Suspense fallback={<div className="min-h-[100dvh]" aria-busy="true" />}>
           <Routes>
           <Route element={<AppShell />}>
@@ -41,7 +46,8 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
-      </SessionProvider>
+        </SessionProvider>
+      </ToastProvider>
     </BrowserRouter>
   )
 }

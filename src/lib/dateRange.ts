@@ -3,9 +3,24 @@
  * overview, so both read from one source and never drift.
  */
 import { shortDate } from "./format"
-import { dayKey } from "./mock"
 
 export type DateRange = { start: Date; end: Date }
+
+/*
+ * `YYYY-MM-DD` from the local calendar, never `toISOString().slice(0,10)`:
+ * that converts to UTC first, so an evening in Manila would key to the
+ * following day and every late sale would land on the wrong audit day.
+ */
+export function dayKey(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+export function fromDayKey(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number)
+  return new Date(y, m - 1, d)
+}
 
 export function startOfDay(d: Date): Date {
   const c = new Date(d)

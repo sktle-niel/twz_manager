@@ -44,10 +44,12 @@ export function NoticeCard({
   title,
   subtitle,
   notices,
+  loading,
 }: {
   title: string
   subtitle?: string
   notices: Notice[]
+  loading?: boolean
 }) {
   return (
     <section className="rounded-xl border border-line bg-surface" data-rise>
@@ -58,7 +60,7 @@ export function NoticeCard({
       <ul className="divide-y divide-line border-t border-line">
         {notices.length === 0 ? (
           <li className="px-5 py-6 text-center text-[13.5px] text-mute">
-            Nothing needs attention right now.
+            {loading ? "Loading…" : "Nothing needs attention right now."}
           </li>
         ) : (
           notices.map((n) => (

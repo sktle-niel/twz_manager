@@ -7,7 +7,7 @@ import {
   WifiHighIcon,
 } from "@phosphor-icons/react"
 import type { Icon } from "@phosphor-icons/react"
-import type { ExpenseCategory } from "./mock"
+import type { ExpenseCategory } from "./api"
 
 export const CATEGORIES: ExpenseCategory[] = [
   "Meals",

@@ -22,6 +22,14 @@ export function hourLabel(h: number): string {
   return h > 12 ? `${h - 12} PM` : `${h} AM`
 }
 
+/* First and last initial, for the avatar fallback and the manager list */
+export function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  const first = parts[0]?.[0] ?? ""
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : ""
+  return (first + last).toUpperCase()
+}
+
 export function clockLabel(d: Date): string {
   return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
 }

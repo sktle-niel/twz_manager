@@ -1,20 +1,14 @@
 /*
- * What a branch needs to act on right now, derived from the same mock the
- * pages already read — unlogged days, the deposit backlog, a short deposit,
- * the POS sync, and a sign-in from another device. One source, so the
- * dashboard status card and anything added later (a bell, a push
- * notification) can never disagree about the branch's state.
+ * What a branch needs to act on right now — unlogged days, the deposit
+ * backlog, a short deposit, the POS sync, and a sign-in from another device.
+ *
+ * It reads through the same API the pages do, so the status card can never
+ * disagree with the figures beside it. Every query it needs is independent, so
+ * they go out together rather than in sequence.
  */
 import { hourLabel, peso, rowDate, timeAgo } from "./format"
-import {
-  dayAuditFor,
-  expectedDepositFor,
-  expensesFor,
-  pendingDepositDays,
-  signInLogFor,
-  visibleHourlySales,
-} from "./mock"
-import { addDays, startOfDay } from "./dateRange"
+import { addDays, dayKey, fromDayKey, startOfDay } from "./dateRange"
+import { api } from "./api"
 
 export type NoticeTone = "alert" | "info" | "ok"
 
@@ -38,7 +32,7 @@ const DISCREPANCY_WINDOW = 14
 /* A sign-in from another device stays on the card this long */
 const NEW_DEVICE_WINDOW_MS = 3 * 86_400_000
 
-export function branchNotices({
+export async function branchNotices({
   storeId,
   managerId,
   now,
@@ -46,12 +40,24 @@ export function branchNotices({
   storeId: string
   managerId: string
   now: Date
-}): Notice[] {
+}): Promise<Notice[]> {
   const today = startOfDay(now)
+  const todayKey = dayKey(today)
   const notices: Notice[] = []
 
+  const [todayExpenses, pending, recent, hours, signIns] = await Promise.all([
+    api.expenses(storeId, { from: todayKey, to: todayKey }),
+    api.pendingDeposits(storeId),
+    api.dayAudits([storeId], {
+      from: dayKey(addDays(today, -DISCREPANCY_WINDOW)),
+      to: dayKey(addDays(today, -1)),
+    }),
+    api.hourlySales([storeId], todayKey),
+    api.signIns(managerId),
+  ])
+
   // Today's spend — the one thing the branch owes the app every single day
-  const todaySpend = expensesFor(storeId, today)
+  const todaySpend = todayExpenses.reduce((sum, i) => sum + i.amount, 0)
   notices.push(
     todaySpend === 0
       ? {
@@ -72,15 +78,14 @@ export function branchNotices({
   )
 
   // Earlier days that are still open and were never logged at all
-  const pending = pendingDepositDays(storeId, today)
-  const missed = pending.filter((d) => expensesFor(storeId, d) === 0)
+  const missed = pending.filter((a) => a.expenses === 0)
   if (missed.length > 0) {
     notices.push({
       id: "missed-expenses",
       tone: "alert",
       title:
         missed.length === 1
-          ? `${rowDate(missed[0])} has nothing logged`
+          ? `${rowDate(fromDayKey(missed[0].day))} has nothing logged`
           : `${missed.length} earlier days have nothing logged`,
       detail: "Not deposited yet, so these days can still be logged.",
       to: "/expenses",
@@ -90,7 +95,8 @@ export function branchNotices({
 
   // Everything audited but not yet covered by a bank deposit
   if (pending.length > 0) {
-    const due = pending.reduce((sum, d) => sum + expectedDepositFor(storeId, d), 0)
+    const due = pending.reduce((sum, a) => sum + a.expected, 0)
+    const since = rowDate(fromDayKey(pending[0].day))
     const late = pending.length > DEPOSIT_BATCH_DAYS
     notices.push({
       id: "deposit-backlog",
@@ -99,31 +105,29 @@ export function branchNotices({
         ? `${pending.length} days waiting for deposit`
         : `${pending.length} day${pending.length === 1 ? "" : "s"} ready to deposit`,
       detail: late
-        ? `${peso.format(due)} due since ${rowDate(pending[0])} — past the usual 3-day window.`
-        : `${peso.format(due)} due since ${rowDate(pending[0])}.`,
+        ? `${peso.format(due)} due since ${since} — past the usual 3-day window.`
+        : `${peso.format(due)} due since ${since}.`,
       to: "/deposits",
       action: "Record deposit",
     })
   }
 
   // The most recent deposit that came up short, if there is one
-  for (let i = 1; i <= DISCREPANCY_WINDOW; i++) {
-    const d = addDays(today, -i)
-    const audit = dayAuditFor(storeId, d)
-    if (audit.status !== "discrepancy" || audit.deposited === null) continue
+  const short = [...recent]
+    .sort((a, b) => (a.day < b.day ? 1 : -1))
+    .find((a) => a.status === "discrepancy" && a.deposited !== null)
+  if (short && short.deposited !== null) {
     notices.push({
       id: "discrepancy",
       tone: "alert",
-      title: `Deposit short by ${peso.format(audit.expected - audit.deposited)}`,
-      detail: `${rowDate(d)} · reference ${audit.reference}.`,
+      title: `Deposit short by ${peso.format(short.expected - short.deposited)}`,
+      detail: `${rowDate(fromDayKey(short.day))} · reference ${short.reference}.`,
       to: "/history",
       action: "View in history",
     })
-    break
   }
 
   // How far today's sales have come through from the POS
-  const hours = visibleHourlySales(storeId, today)
   const lastHour = hours[hours.length - 1]
   notices.push({
     id: "pos-sync",
@@ -135,13 +139,13 @@ export function branchNotices({
   })
 
   // A sign-in from a device other than this one, with where it came from
-  const other = signInLogFor(managerId, now).find((e) => !e.current)
-  if (other && now.getTime() - other.at.getTime() <= NEW_DEVICE_WINDOW_MS) {
+  const other = signIns.find((e) => !e.current)
+  if (other && now.getTime() - new Date(other.at).getTime() <= NEW_DEVICE_WINDOW_MS) {
     notices.push({
       id: "new-device",
       tone: "info",
       title: `Signed in on ${other.device}`,
-      detail: `${other.ip} · ${other.place} · ${timeAgo(other.at, now)}`,
+      detail: `${other.ip} · ${other.place} · ${timeAgo(new Date(other.at), now)}`,
       to: "/account",
       action: "See every sign-in",
     })
