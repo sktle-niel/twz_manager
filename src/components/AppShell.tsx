@@ -12,6 +12,9 @@ import {
 import type { Icon } from "@phosphor-icons/react"
 import logo from "../assets/twz-logo-light.png"
 import { useRouteReveal, useSheetEnter } from "../lib/motion"
+import { useSession } from "../lib/session"
+import { useToast } from "../lib/toast"
+import { GlobalSearch } from "./GlobalSearch"
 
 const NAV: { to: string; label: string; icon: Icon; end?: boolean }[] = [
   { to: "/", label: "Dashboard", icon: SquaresFourIcon, end: true },
@@ -102,6 +105,8 @@ function NewEntrySheet({ open, onClose }: { open: boolean; onClose: () => void }
 
 export default function AppShell() {
   const [sheetOpen, setSheetOpen] = useState(false)
+  const { showToast } = useToast()
+  const { store } = useSession()
   const mainRef = useRef<HTMLElement>(null)
   const { pathname } = useLocation()
   /*
@@ -146,6 +151,7 @@ export default function AppShell() {
           <div className="mt-auto border-t border-line pt-3">
             <Link
               to="/login"
+              onClick={() => showToast("Signed out.")}
               className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium text-ink-soft transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
             >
               <SignOutIcon size={18} aria-hidden="true" />
@@ -210,6 +216,9 @@ export default function AppShell() {
       </nav>
 
       <NewEntrySheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
+
+      {/* Scoped to the signed-in manager's branch, like every other page here */}
+      <GlobalSearch storeIds={[store.id]} owner={false} />
     </div>
   )
 }

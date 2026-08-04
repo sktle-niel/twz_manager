@@ -2,9 +2,11 @@ import { useState } from "react"
 import type { SubmitEvent } from "react"
 import { PaperclipIcon, PlusIcon, WarningCircleIcon, XIcon } from "@phosphor-icons/react"
 import { peso, rowDate, shortDate } from "../lib/format"
-import { dayKey, expenseItemsFor, pendingDepositDays } from "../lib/mock"
+import { dayKey, fromDayKey } from "../lib/dateRange"
+import { api } from "../lib/api"
+import { useApi } from "../lib/useApi"
 import { useSession } from "../lib/session"
-import type { ExpenseCategory, ExpenseItem } from "../lib/mock"
+import type { ExpenseCategory, ExpenseItem } from "../lib/api"
 import {
   CATEGORIES,
   CATEGORY_ICON,
@@ -18,7 +20,7 @@ import { ReceiptUploader } from "../components/ReceiptUploader"
 import type { ReceiptEntry } from "../lib/receipts"
 import { RowMenu } from "../components/RowMenu"
 import { ExpenseDialog } from "../components/ExpenseDialog"
-import { Toast } from "../components/Toast"
+import { useToast } from "../lib/toast"
 
 type FieldErrors = { amount?: string; receipt?: string }
 
@@ -33,18 +35,11 @@ type DraftLine = {
 }
 
 /*
- * Corrections layered over one day. The day's expenses come from two places —
- * rows this session logged, and rows the mock already had — so edits and
- * deletes are keyed by item id and applied to both alike, rather than only
- * being possible on the ones we happen to hold in state.
+ * Corrections used to be layered over the day in page state, because the rows
+ * came from two places — ones this session logged and ones already on file.
+ * They are one place now: every add, edit and delete goes to the API and the
+ * day is re-read, so a correction survives navigating away.
  */
-type DayEdits = {
-  added: ExpenseItem[]
-  removed: string[]
-  edited: Record<string, ExpenseItem>
-}
-
-const NO_EDITS: DayEdits = { added: [], removed: [], edited: {} }
 
 function ExpenseRow({
   item,
@@ -94,6 +89,7 @@ function ExpenseRow({
 
 export default function ExpensesPage() {
   const { store } = useSession()
+  const { showToast } = useToast()
   const storeId = store.id
   const [dayValue, setDayValue] = useState(() => dayKey(new Date()))
   const [amount, setAmount] = useState("")
@@ -103,12 +99,7 @@ export default function ExpensesPage() {
   const [errors, setErrors] = useState<FieldErrors>({})
   const [draft, setDraft] = useState<DraftLine[]>([])
   const [saving, setSaving] = useState(false)
-  const [dayEdits, setDayEdits] = useState<Record<string, DayEdits>>({})
   const [editing, setEditing] = useState<ExpenseItem | null>(null)
-  /* Keyed by id so repeating the same message replays the toast animation */
-  const [toast, setToast] = useState<{ id: number; message: string } | null>(null)
-
-  const showToast = (message: string) => setToast({ id: Date.now(), message })
 
   const today = new Date()
   const todayKey = dayKey(today)
@@ -119,28 +110,30 @@ export default function ExpensesPage() {
    * already been matched. Today plus the days still awaiting a deposit, newest
    * first; the same source the Deposits page reads.
    */
-  const eligibleDays = [today, ...pendingDepositDays(storeId, today).slice().reverse()]
+  const pending = useApi(() => api.pendingDeposits(storeId), [storeId])
+  const eligibleKeys = [todayKey, ...[...(pending.data ?? [])].reverse().map((a) => a.day)]
 
   // Falls back to today when a branch switch makes the chosen day ineligible
-  const selectedDay = eligibleDays.find((d) => dayKey(d) === dayValue) ?? eligibleDays[0]
-  const selectedKey = dayKey(selectedDay)
+  const selectedKey = eligibleKeys.includes(dayValue) ? dayValue : todayKey
+  const selectedDay = fromDayKey(selectedKey)
   const isToday = selectedKey === todayKey
+  const eligibleDays = eligibleKeys.map(fromDayKey)
 
-  const bucket = (d: Date) => `${storeId}:${dayKey(d)}`
+  /* Every eligible day in one request rather than a call per row */
+  const oldestKey = eligibleKeys[eligibleKeys.length - 1] ?? todayKey
+  const expenses = useApi(
+    () => api.expenses(storeId, { from: oldestKey, to: todayKey }),
+    [storeId, oldestKey, todayKey],
+  )
+
+  const byDay = new Map<string, ExpenseItem[]>()
+  for (const item of expenses.data ?? []) {
+    byDay.set(item.day, [...(byDay.get(item.day) ?? []), item])
+  }
+
   const dayLabel = (d: Date) => (dayKey(d) === todayKey ? `Today, ${shortDate(d)}` : rowDate(d))
-
-  function itemsFor(d: Date): ExpenseItem[] {
-    const edits = dayEdits[bucket(d)] ?? NO_EDITS
-    return [...edits.added, ...expenseItemsFor(storeId, d)]
-      .filter((i) => !edits.removed.includes(i.id))
-      .map((i) => edits.edited[i.id] ?? i)
-  }
+  const itemsFor = (d: Date): ExpenseItem[] => byDay.get(dayKey(d)) ?? []
   const totalFor = (d: Date) => itemsFor(d).reduce((sum, i) => sum + i.amount, 0)
-
-  function patchDay(d: Date, patch: (edits: DayEdits) => DayEdits) {
-    const key = bucket(d)
-    setDayEdits((prev) => ({ ...prev, [key]: patch(prev[key] ?? NO_EDITS) }))
-  }
 
   const items = itemsFor(selectedDay)
   const selectedTotal = items.reduce((sum, i) => sum + i.amount, 0)
@@ -204,38 +197,42 @@ export default function ExpensesPage() {
     if (lines.length === 0) return
 
     setSaving(true)
-    // TODO: one batch call to the real API once the backend exists
-    await new Promise((r) => setTimeout(r, 700))
-    const saved: ExpenseItem[] = lines.map((l) => ({
-      id: l.id,
-      category: l.category,
-      note: l.note,
-      amount: l.amount,
-      time: l.time,
-      receiptCount: l.receipts.length,
-      receipts: l.receipts.length > 0 ? l.receipts : undefined,
-    }))
-    patchDay(selectedDay, (edits) => ({ ...edits, added: [...saved, ...edits.added] }))
+    // One batch call — the whole evening's spend is a single write
+    await api.addExpenses(
+      lines.map((l) => ({
+        storeId,
+        day: selectedKey,
+        category: l.category,
+        note: l.note,
+        amount: l.amount,
+        receipts: l.receipts,
+      })),
+    )
+    expenses.reload()
     setDraft([])
     clearFields()
     setSaving(false)
     showToast(
-      `${saved.length} ${saved.length === 1 ? "expense" : "expenses"} saved to ${
+      `${lines.length} ${lines.length === 1 ? "expense" : "expenses"} saved to ${
         isToday ? "today" : shortDate(selectedDay)
       }.`,
     )
   }
 
-  function deleteItem(item: ExpenseItem) {
-    patchDay(selectedDay, (edits) => ({ ...edits, removed: [...edits.removed, item.id] }))
+  async function deleteItem(item: ExpenseItem) {
+    await api.deleteExpense(item.id)
+    expenses.reload()
     showToast(`Deleted ${item.note}.`)
   }
 
-  function saveEdit(updated: ExpenseItem) {
-    patchDay(selectedDay, (edits) => ({
-      ...edits,
-      edited: { ...edits.edited, [updated.id]: updated },
-    }))
+  async function saveEdit(updated: ExpenseItem, files: File[]) {
+    await api.updateExpense(updated.id, {
+      category: updated.category,
+      note: updated.note,
+      amount: updated.amount,
+      ...(files.length > 0 ? { receipts: files } : {}),
+    })
+    expenses.reload()
     setEditing(null)
     showToast(`Updated ${updated.note}.`)
   }
@@ -521,12 +518,6 @@ export default function ExpensesPage() {
         dayLabel={dayLabel(selectedDay)}
         onSave={saveEdit}
         onClose={() => setEditing(null)}
-      />
-
-      <Toast
-        key={toast?.id}
-        message={toast?.message ?? ""}
-        onDismiss={() => setToast(null)}
       />
     </>
   )

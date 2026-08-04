@@ -5,9 +5,17 @@
  */
 import { DeviceMobileIcon, LaptopIcon } from "@phosphor-icons/react"
 import { timeAgo } from "../lib/format"
-import type { SignInEvent } from "../lib/mock"
+import type { SignInEvent } from "../lib/api"
 
-export function SignInCard({ events, now }: { events: SignInEvent[]; now: Date }) {
+export function SignInCard({
+  events,
+  now,
+  loading,
+}: {
+  events: SignInEvent[]
+  now: Date
+  loading?: boolean
+}) {
   return (
     <section className="rounded-xl border border-line bg-surface" data-rise>
       <div className="px-5 pb-3 pt-4">
@@ -17,6 +25,9 @@ export function SignInCard({ events, now }: { events: SignInEvent[]; now: Date }
         </p>
       </div>
       <ul className="divide-y divide-line border-t border-line">
+        {loading && events.length === 0 && (
+          <li className="px-5 py-6 text-center text-[13px] text-mute">Loading…</li>
+        )}
         {events.map((e) => {
           const DeviceIcon = e.kind === "phone" ? DeviceMobileIcon : LaptopIcon
           return (
@@ -35,7 +46,8 @@ export function SignInCard({ events, now }: { events: SignInEvent[]; now: Date }
                 <p className="text-[12.5px] leading-[1.5] text-mute">
                   <span className="font-mono text-[12px] text-ink-soft">{e.ip}</span> · {e.place}
                 </p>
-                <p className="mt-0.5 text-[12px] text-mute">{timeAgo(e.at, now)}</p>
+                {/* `at` crosses the wire as an ISO instant, not a Date */}
+                <p className="mt-0.5 text-[12px] text-mute">{timeAgo(new Date(e.at), now)}</p>
               </div>
             </li>
           )

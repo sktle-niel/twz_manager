@@ -4,9 +4,13 @@ Daily sales audit and bank-deposit reconciliation for **Two Wheels Zone**, a mul
 motorcycle shop. It pulls each branch's sales from Loyverse POS, deducts the expenses the branch
 logged that day, and checks every bank deposit against what the branch actually owed.
 
-> **Status: front end only.** Every figure in the app is deterministic sample data from
-> `src/lib/mock.ts` — seeded from the branch id and the date, so the same day always shows the same
-> numbers. There is no backend yet: no authentication, no Loyverse integration, no persistence.
+> **Status: front end only.** Every figure in the app is deterministic sample data, seeded from
+> the branch id and the date, so the same day always shows the same numbers. There is no backend
+> yet: no authentication, no Loyverse integration, no persistence.
+>
+> `src/lib/api/` is the seam where a backend plugs in — `contracts.ts` states what it must
+> implement, and `VITE_DATA_SOURCE` chooses between the real client and the sample adapter.
+> [`docs/LOYVERSE.md`](docs/LOYVERSE.md) is the POS integration study.
 
 ## The problem it replaces
 
@@ -55,6 +59,7 @@ choice in the UI.
 | `/admin/history` | The same audit table with a branch column |
 | `/admin/managers` | Issue and reassign branch-manager accounts (one branch each) |
 | `/admin/settings` | Branches, POS connection, expense categories, reconciliation rules |
+| `/admin/account` | Owner profile, password, sign out, and the sign-in log |
 
 ## Running it
 
@@ -62,6 +67,7 @@ Needs Node 20 or newer.
 
 ```bash
 npm install
+cp .env.example .env.local   # keeps VITE_DATA_SOURCE=sample for development
 npm run dev      # http://localhost:5173
 npm run build    # tsc -b && vite build
 npm run lint
@@ -69,8 +75,11 @@ npm run lint
 
 Sign-in accepts any username or Gmail and resolves it against the sample accounts — try
 `marvin.deocampo` (Arevalo), `joel.sarabia` (Molo), or `rhea.villanueva` (Jaro) to switch which
-branch you are looking at. Anything unrecognised falls back to the first account. The **Owner
-view** link on the sign-in page opens the admin area; there is no role check behind it yet.
+branch you are looking at. Anything unrecognised falls back to the first account.
+
+The owner area has no entry point in the UI yet — sign-in always lands on the manager side, so
+open **`/admin`** directly to see it. Which side an account gets is a routing decision for the
+auth backend, and there is no role check to make it with.
 
 ## Stack
 
@@ -85,8 +94,15 @@ src/
   components/   shells, cards, dialogs, and the custom Select/DateRangePicker
   pages/        one file per route
   lib/
-    mock.ts       all sample data, seeded and deterministic
-    notices.ts    what a branch needs to act on, derived from the mock
+    api/
+      contracts.ts  everything the app asks of a backend
+      types.ts      the domain, with no mention of Loyverse
+      client.ts     fetch, errors, uploads
+      http.ts       the real adapter
+      sample.ts     deterministic development data — delete with the backend
+      index.ts      picks one from VITE_DATA_SOURCE
+    useApi.ts     one read, with loading/error/reload
+    notices.ts    what a branch needs to act on
     dateRange.ts  the shared range model behind both charts
     session.ts    the signed-in manager and their branch
     motion.ts     GSAP tokens, the reduced-motion opt-out, and the shared hooks

@@ -20,7 +20,7 @@ import {
   startOfWeek,
 } from "../lib/dateRange"
 import type { DateRange, PresetKey } from "../lib/dateRange"
-import { dayKey } from "../lib/mock"
+import { dayKey } from "../lib/dateRange"
 import { useSheetEnter } from "../lib/motion"
 import { controlClass } from "./ui"
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { hourLabel, peso, rowDate, shortDate } from "../lib/format"
 import { BranchTag } from "../components/ui"
 import { DateRangePicker } from "../components/DateRangePicker"
@@ -6,10 +6,19 @@ import { SalesChart } from "../components/SalesChart"
 import type { SalesPoint } from "../components/SalesChart"
 import { NoticeCard } from "../components/NoticeCard"
 import { Pagination } from "../components/Pagination"
-import { dayKey, expensesFor, grossSalesFor, visibleHourlySales } from "../lib/mock"
+import { api } from "../lib/api"
+import { useApi } from "../lib/useApi"
 import { branchNotices } from "../lib/notices"
 import { useSession } from "../lib/session"
-import { addDays, presetRange, rangeDays, rangeLabel, sameDay, startOfDay } from "../lib/dateRange"
+import {
+  addDays,
+  dayKey,
+  presetRange,
+  rangeDays,
+  rangeLabel,
+  sameDay,
+  startOfDay,
+} from "../lib/dateRange"
 import type { DateRange } from "../lib/dateRange"
 
 const rowGrid =
@@ -24,7 +33,7 @@ export default function DashboardPage() {
   /* Frozen at mount so the status rail's relative times hold still between renders */
   const [now] = useState(() => new Date())
 
-  const notices = useMemo(
+  const notices = useApi(
     () => branchNotices({ storeId: store.id, managerId: manager.id, now }),
     [store.id, manager.id, now],
   )
@@ -35,42 +44,44 @@ export default function DashboardPage() {
 
   const today = startOfDay(new Date())
   const days = rangeDays(range, today)
-
-  const storeIds = [store.id]
   const singleDay = days.length === 1
-
-  let chartData: SalesPoint[] = []
-  if (singleDay) {
-    const perStore = storeIds.map((id) => visibleHourlySales(id, days[0]))
-    const len = perStore[0]?.length ?? 0
-    chartData = Array.from({ length: len }, (_, i) => ({
-      label: hourLabel(perStore[0][i].hour),
-      amount: perStore.reduce((sum, list) => sum + list[i].amount, 0),
-    }))
-  } else {
-    chartData = days.map((d) => ({
-      label: shortDate(d),
-      amount: storeIds.reduce((sum, id) => sum + grossSalesFor(id, d), 0),
-    }))
-  }
-
-  const grossTotal = days.reduce(
-    (sum, d) => sum + storeIds.reduce((s, id) => s + grossSalesFor(id, d), 0),
-    0,
-  )
-  const expensesTotal = days.reduce(
-    (sum, d) => sum + storeIds.reduce((s, id) => s + expensesFor(id, d), 0),
-    0,
-  )
-  const expectedTotal = grossTotal - expensesTotal
-
-  const storeLabel = store.name
-  const label = rangeLabel(range, today)
 
   const listDays: Date[] = singleDay
     ? Array.from({ length: 7 }, (_, i) => addDays(range.start, -(i + 1)))
     : [...days].reverse()
   const listTitle = singleDay ? "Previous days" : "Daily summary"
+
+  /*
+   * One request covering both the chart and the list below it. On a single day
+   * the list still reaches a week back, so the query is widened rather than
+   * fired twice.
+   */
+  const spanFrom = dayKey(
+    listDays.length > 0 && listDays[listDays.length - 1] < days[0] ? listDays[listDays.length - 1] : days[0] ?? today,
+  )
+  const spanTo = dayKey(days[days.length - 1] ?? today)
+  const sales = useApi(
+    () => api.dailySales([store.id], { from: spanFrom, to: spanTo }),
+    [store.id, spanFrom, spanTo],
+  )
+  const hourly = useApi(
+    () => (singleDay ? api.hourlySales([store.id], dayKey(days[0])) : Promise.resolve([])),
+    [store.id, singleDay, singleDay ? dayKey(days[0]) : ""],
+  )
+
+  const byDay = new Map((sales.data ?? []).map((row) => [row.day, row]))
+  const inRange = days.map((d) => byDay.get(dayKey(d))).filter((r) => r !== undefined)
+
+  const chartData: SalesPoint[] = singleDay
+    ? (hourly.data ?? []).map((p) => ({ label: hourLabel(p.hour), amount: p.amount }))
+    : days.map((d) => ({ label: shortDate(d), amount: byDay.get(dayKey(d))?.gross ?? 0 }))
+
+  const grossTotal = inRange.reduce((sum, r) => sum + r.gross, 0)
+  const expensesTotal = inRange.reduce((sum, r) => sum + r.expenses, 0)
+  const expectedTotal = grossTotal - expensesTotal
+
+  const storeLabel = store.name
+  const label = rangeLabel(range, today)
 
   const listTotalPages = Math.max(1, Math.ceil(listDays.length / PAGE_SIZE))
   const listPage = Math.min(page, listTotalPages)
@@ -153,7 +164,8 @@ export default function DashboardPage() {
           <NoticeCard
             title="Status"
             subtitle={`What needs attention at the ${store.name} branch.`}
-            notices={notices}
+            notices={notices.data ?? []}
+            loading={notices.loading}
           />
         </div>
 
@@ -183,8 +195,9 @@ export default function DashboardPage() {
           <>
           <ul className="divide-y divide-line">
             {pageDays.map((d) => {
-              const gross = storeIds.reduce((s, id) => s + grossSalesFor(id, d), 0)
-              const spent = storeIds.reduce((s, id) => s + expensesFor(id, d), 0)
+              const row = byDay.get(dayKey(d))
+              const gross = row?.gross ?? 0
+              const spent = row?.expenses ?? 0
               return (
                 <li key={dayKey(d)} className={rowGrid}>
                   <span className="text-[13.5px] font-medium text-ink-soft">

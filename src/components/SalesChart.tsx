@@ -1,7 +1,11 @@
 /*
- * Shared gross-sales chart: a smooth area chart, used for both a single day
- * (hourly points) and multi-day ranges (one point per day). Used by the
- * manager dashboard and the owner overview so the two graphs stay identical.
+ * Shared gross-sales chart, used for both a single day (hourly points) and
+ * multi-day ranges (one point per day), by the manager dashboard and the owner
+ * overview so the two graphs stay identical.
+ *
+ * Straight segments rather than a smoothed curve: each point is a real reading,
+ * and a monotone spline invents values between them — it would bow above a
+ * plotted figure and read as sales that never happened.
  */
 import {
   Area,
@@ -36,18 +40,30 @@ function ChartTip({ active, label, payload }: TipProps) {
 
 const axisTick = { fill: "#6e6d66", fontSize: 11 }
 
+const BRAND = "#1e7d1b"
+const LINE = "#e9e8e4"
+
+/*
+ * Past this many readings the per-point marks and the vertical grid stop
+ * helping: the dots run together and the grid fills in solid. A quarter of
+ * daily figures crosses it; every hourly day and every month does not.
+ */
+const DENSE_AFTER = 31
+
 export function SalesChart({ data, ariaLabel }: { data: SalesPoint[]; ariaLabel: string }) {
+  const dense = data.length > DENSE_AFTER
+
   return (
     <div className="mt-5 h-56 sm:h-64 xl:h-[20rem] 2xl:h-[22rem]" role="img" aria-label={ariaLabel}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="salesFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#1e7d1b" stopOpacity={0.14} />
-              <stop offset="100%" stopColor="#1e7d1b" stopOpacity={0} />
+              <stop offset="0%" stopColor={BRAND} stopOpacity={0.14} />
+              <stop offset="100%" stopColor={BRAND} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid vertical={false} stroke="#e9e8e4" />
+          <CartesianGrid vertical={!dense} stroke={LINE} />
           <XAxis
             dataKey="label"
             tickLine={false}
@@ -63,15 +79,18 @@ export function SalesChart({ data, ariaLabel }: { data: SalesPoint[]; ariaLabel:
             tick={axisTick}
             tickFormatter={(v: number) => `₱${compact.format(v)}`}
           />
-          <Tooltip content={<ChartTip />} cursor={{ stroke: "#8f8e86", strokeDasharray: "3 3" }} />
+          {/* Full-height solid rule rather than a dashed grey one: it reads as
+              part of the series it is measuring, not as another gridline */}
+          <Tooltip content={<ChartTip />} cursor={{ stroke: BRAND, strokeWidth: 1 }} />
           <Area
-            type="monotone"
+            type="linear"
             dataKey="amount"
-            stroke="#1e7d1b"
+            stroke={BRAND}
             strokeWidth={1.75}
             fill="url(#salesFill)"
             isAnimationActive={false}
-            activeDot={{ r: 3.5, fill: "#1e7d1b", stroke: "#ffffff" }}
+            dot={dense ? false : { r: 2.5, fill: BRAND, stroke: "#ffffff", strokeWidth: 1 }}
+            activeDot={{ r: 4.5, fill: "#ffffff", stroke: BRAND, strokeWidth: 2 }}
           />
         </AreaChart>
       </ResponsiveContainer>

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react"
 import { CalendarBlankIcon, FunnelIcon } from "@phosphor-icons/react"
 import { peso } from "../lib/format"
-import { dayAuditFor, dayKey } from "../lib/mock"
-import type { DayStatus } from "../lib/mock"
+import { api } from "../lib/api"
+import type { DayStatus } from "../lib/api"
+import { useApi } from "../lib/useApi"
 import { BranchTag, FilterSelect } from "../components/ui"
 import { useSession } from "../lib/session"
 import { StatCard } from "../components/StatCard"
@@ -11,7 +12,7 @@ import { Pagination } from "../components/Pagination"
 import { AUDIT_COLS, AuditHeader, AuditRow } from "../components/AuditRow"
 import { ReceiptDialog } from "../components/ReceiptDialog"
 import type { ReceiptTarget } from "../components/ReceiptDialog"
-import { addDays, startOfDay } from "../lib/dateRange"
+import { addDays, dayKey, fromDayKey, startOfDay } from "../lib/dateRange"
 
 type RangePreset = "last7" | "last30" | "last90" | "thisMonth" | "lastMonth" | "thisYear"
 type StatusFilter = "all" | DayStatus
@@ -80,10 +81,16 @@ export default function HistoryPage() {
       break
   }
 
-  const allRows: { date: Date; audit: ReturnType<typeof dayAuditFor> }[] = []
-  for (let d = end; d >= start && allRows.length < MAX_SCAN_DAYS; d = addDays(d, -1)) {
-    allRows.push({ date: d, audit: dayAuditFor(storeId, d) })
-  }
+  /* One request for the whole range; the filters below are applied to what
+     came back rather than sent as another query */
+  const from = dayKey(addDays(end, -(MAX_SCAN_DAYS - 1)) > start ? addDays(end, -(MAX_SCAN_DAYS - 1)) : start)
+  const to = dayKey(end)
+  const audits = useApi(() => api.dayAudits([storeId], { from, to }), [storeId, from, to])
+
+  // Newest first
+  const allRows = [...(audits.data ?? [])]
+    .sort((a, b) => (a.day < b.day ? 1 : -1))
+    .map((audit) => ({ date: fromDayKey(audit.day), audit }))
   const rows = allRows.filter((r) => status === "all" || r.audit.status === status)
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
@@ -153,7 +160,11 @@ export default function HistoryPage() {
 
         <AuditHeader cols={AUDIT_COLS} withBranch={false} />
 
-        {rows.length === 0 ? (
+        {audits.loading && rows.length === 0 ? (
+          <p className="px-5 py-10 text-center text-[14px] text-mute">Loading…</p>
+        ) : audits.error ? (
+          <p className="px-5 py-10 text-center text-[14px] text-claret">{audits.error}</p>
+        ) : rows.length === 0 ? (
           <p className="px-5 py-10 text-center text-[14px] text-mute">
             No days match these filters.
           </p>

@@ -21,7 +21,9 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
 
-    "baseUrl": ".",
+    // No baseUrl: it is deprecated in TS 6 and removed in 7. Since 4.1 the
+    // patterns below resolve relative to this file, which lands in the same
+    // place — matching the "@" alias in vite.config.ts.
     "paths": {
       "@/*": ["./src/*"]
     }

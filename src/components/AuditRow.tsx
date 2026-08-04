@@ -1,6 +1,6 @@
 import { CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react"
 import { peso, rowDate, shortDate } from "../lib/format"
-import type { DayAudit, DayStatus } from "../lib/mock"
+import type { DayAudit, DayStatus } from "../lib/api"
 import { RowMenu } from "./RowMenu"
 
 /*

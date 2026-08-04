@@ -11,6 +11,9 @@ import {
 import type { Icon } from "@phosphor-icons/react"
 import logo from "../assets/twz-logo-light.png"
 import { useRouteReveal } from "../lib/motion"
+import { useSession } from "../lib/session"
+import { useToast } from "../lib/toast"
+import { GlobalSearch } from "./GlobalSearch"
 
 const NAV: { to: string; label: string; icon: Icon; end?: boolean }[] = [
   { to: "/admin", label: "Overview", icon: SquaresFourIcon, end: true },
@@ -24,6 +27,9 @@ const NAV: { to: string; label: string; icon: Icon; end?: boolean }[] = [
 const MOBILE_TABS = NAV.slice(0, 4)
 
 export default function AdminShell() {
+  const { showToast } = useToast()
+  const { stores } = useSession()
+  const allStoreIds = stores.map((s) => s.id)
   const mainRef = useRef<HTMLElement>(null)
   const { pathname } = useLocation()
   useRouteReveal(mainRef, pathname)
@@ -67,6 +73,7 @@ export default function AdminShell() {
           <div className="mt-auto border-t border-line pt-3">
             <Link
               to="/login"
+              onClick={() => showToast("Signed out.")}
               className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium text-ink-soft transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
             >
               <SignOutIcon size={18} aria-hidden="true" />
@@ -115,6 +122,9 @@ export default function AdminShell() {
           ))}
         </div>
       </nav>
+
+      {/* Every branch, plus the accounts and branches only the owner sees */}
+      <GlobalSearch storeIds={allStoreIds} owner />
     </div>
   )
 }

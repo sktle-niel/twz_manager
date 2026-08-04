@@ -1,21 +1,17 @@
 import { useState } from "react"
 import type { SubmitEvent } from "react"
 import { LockIcon, LockOpenIcon, StorefrontIcon } from "@phosphor-icons/react"
-import { MANAGERS, STORES } from "../lib/mock"
-import type { Manager } from "../lib/mock"
+import { api } from "../lib/api"
+import type { Manager } from "../lib/api"
+import { useApi } from "../lib/useApi"
+import { useSession } from "../lib/session"
+import { initials } from "../lib/format"
 import { FilterSelect, FormField, inputBad, inputBase, inputOk } from "../components/ui"
 import { Select } from "../components/Select"
 import type { SelectOption } from "../components/Select"
-import { Toast } from "../components/Toast"
+import { useToast } from "../lib/toast"
 
 type FieldErrors = { name?: string; email?: string }
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/)
-  const first = parts[0]?.[0] ?? ""
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : ""
-  return (first + last).toUpperCase()
-}
 
 function ManagerRow({
   manager,
@@ -79,40 +75,36 @@ function ManagerRow({
 }
 
 export default function AdminManagersPage() {
+  const { showToast } = useToast()
+  const { stores } = useSession()
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
-  const [branch, setBranch] = useState(STORES[0].id)
+  const [branch, setBranch] = useState(stores[0].id)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [saving, setSaving] = useState(false)
-  const [added, setAdded] = useState<Manager[]>([])
-  // Branch reassignments layered over the base list, keyed by manager id, so
-  // an existing account can be moved without editing the underlying data
-  const [branchOverride, setBranchOverride] = useState<Record<string, string>>({})
   // Locked by default so a stray click never moves a manager; the admin
   // unlocks a row deliberately before reassigning it
   const [locked, setLocked] = useState<Record<string, boolean>>({})
-  const [toast, setToast] = useState<{ id: number; message: string } | null>(null)
 
-  const showToast = (message: string) => setToast({ id: Date.now(), message })
   const isLocked = (id: string) => locked[id] ?? true
   const toggleLock = (id: string) => setLocked((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }))
 
-  const managers: Manager[] = [...added, ...MANAGERS].map((m) => ({
-    ...m,
-    storeId: branchOverride[m.id] ?? m.storeId,
-  }))
+  /* The list is the server's now: reassignment used to be an override layer
+     held here, which meant a swap only existed on this page */
+  const loaded = useApi(() => api.managers(), [])
+  const managers = loaded.data ?? []
 
   // One branch per manager: a branch is taken by whoever currently holds it
   const takenBy: Record<string, string> = {}
   for (const m of managers) takenBy[m.storeId] = m.id
-  const freeStores = STORES.filter((s) => !takenBy[s.id])
-  const storeName = (storeId: string) => STORES.find((s) => s.id === storeId)?.name ?? storeId
+  const freeStores = stores.filter((s) => !takenBy[s.id])
+  const storeName = (storeId: string) => stores.find((s) => s.id === storeId)?.name ?? storeId
 
   // Every branch is offered for reassignment: the manager's own, the free ones,
   // and those held by someone else — picking an occupied branch swaps the two,
   // which is how a wrong assignment gets corrected without ever doubling up.
   const optionsFor = (m: Manager): SelectOption[] =>
-    STORES.flatMap((s) => {
+    stores.flatMap((s) => {
       const holder = managers.find((x) => x.id !== m.id && x.storeId === s.id)
       // A locked manager can't be swapped out, so drop their branch as a target
       if (holder && isLocked(holder.id)) return []
@@ -122,15 +114,12 @@ export default function AdminManagersPage() {
   // Keep the issue-form choice valid as branches fill up
   const issueBranch = freeStores.some((s) => s.id === branch) ? branch : freeStores[0]?.id ?? ""
 
-  function reassign(manager: Manager, storeId: string) {
+  async function reassign(manager: Manager, storeId: string) {
     if (isLocked(manager.id) || storeId === manager.storeId) return
     const holder = managers.find((m) => m.id !== manager.id && m.storeId === storeId)
-    // TODO: persist to the real API once the backend exists
-    setBranchOverride((prev) => {
-      const next = { ...prev, [manager.id]: storeId }
-      if (holder) next[holder.id] = manager.storeId // swap: the other manager takes this one's old branch
-      return next
-    })
+    // The swap is the server's to make — it owns the one-branch-one-manager rule
+    await api.assignBranch(manager.id, storeId)
+    loaded.reload()
     showToast(
       holder
         ? `Swapped — ${manager.name} → ${storeName(storeId)}, ${holder.name} → ${storeName(manager.storeId)}.`
@@ -157,18 +146,12 @@ export default function AdminManagersPage() {
     if (!issueBranch) return
 
     setSaving(true)
-    // TODO: send the invite to the real API once the backend exists
-    await new Promise((r) => setTimeout(r, 600))
-    const mail = email.trim()
-    const manager: Manager = {
-      id: `local-${Date.now().toString(36)}`,
+    const manager = await api.issueManager({
       name: name.trim(),
-      username: mail.split("@")[0],
-      email: mail,
+      email: email.trim(),
       storeId: issueBranch,
-      active: true,
-    }
-    setAdded((prev) => [manager, ...prev])
+    })
+    loaded.reload()
     setName("")
     setEmail("")
     setBranch("")
@@ -293,8 +276,6 @@ export default function AdminManagersPage() {
           </form>
         </section>
       </div>
-
-      <Toast key={toast?.id} message={toast?.message ?? ""} onDismiss={() => setToast(null)} />
     </>
   )
 }

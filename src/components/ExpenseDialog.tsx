@@ -3,7 +3,7 @@ import type { SubmitEvent } from "react"
 import { createPortal } from "react-dom"
 import { XIcon } from "@phosphor-icons/react"
 import { useSheetEnter } from "../lib/motion"
-import type { ExpenseCategory, ExpenseItem } from "../lib/mock"
+import type { ExpenseCategory, ExpenseItem } from "../lib/api"
 import {
   CATEGORIES,
   DEFAULT_NOTE,
@@ -13,13 +13,14 @@ import {
 import { FormField, inputBad, inputBase, inputOk } from "./ui"
 import { Select } from "./Select"
 import { ReceiptUploader } from "./ReceiptUploader"
-import { newReceiptEntry, onFileEntries } from "../lib/receipts"
+import { onFileEntries } from "../lib/receipts"
 import type { ReceiptEntry } from "../lib/receipts"
 
 type FieldErrors = { amount?: string; receipt?: string }
 
+/* Stored receipts arrive as a count, not as files — there is no way to preview
+   one the server holds until it serves them, so they show as placeholders */
 function entriesFor(item: ExpenseItem): ReceiptEntry[] {
-  if (item.receipts?.length) return item.receipts.map(newReceiptEntry)
   return onFileEntries(item.receiptCount)
 }
 
@@ -40,7 +41,8 @@ export function ExpenseDialog({
 }: {
   item: ExpenseItem | null
   dayLabel: string
-  onSave: (updated: ExpenseItem) => void
+  /** The edited row, plus any newly attached files to upload with it */
+  onSave: (updated: ExpenseItem, files: File[]) => void
   onClose: () => void
 }) {
   const [amount, setAmount] = useState(() => (item ? String(item.amount) : ""))
@@ -83,15 +85,16 @@ export function ExpenseDialog({
     if (Object.keys(next).length > 0) return
 
     const files = receipts.map((r) => r.file).filter((f): f is File => f !== null)
-    onSave({
-      ...current,
-      category,
-      note: note.trim() || DEFAULT_NOTE[category],
-      amount: Math.round(value),
-      receiptCount: receipts.length,
-      // Keep the mock's files-absent shape when we hold none to hand back
-      receipts: files.length > 0 ? files : undefined,
-    })
+    onSave(
+      {
+        ...current,
+        category,
+        note: note.trim() || DEFAULT_NOTE[category],
+        amount: Math.round(value),
+        receiptCount: receipts.length,
+      },
+      files,
+    )
   }
 
   return createPortal(
