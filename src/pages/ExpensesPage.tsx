@@ -1,19 +1,13 @@
 import { useState } from "react"
 import type { SubmitEvent } from "react"
 import { PaperclipIcon, PlusIcon, WarningCircleIcon, XIcon } from "@phosphor-icons/react"
-import { peso, rowDate, shortDate } from "../lib/format"
+import { clockLabel, peso, rowDate, shortDate } from "../lib/format"
 import { dayKey, fromDayKey } from "../lib/dateRange"
-import { api } from "../lib/api"
+import { ApiError, api } from "../lib/api"
 import { useApi } from "../lib/useApi"
-import { useSession } from "../lib/session"
-import type { ExpenseCategory, ExpenseItem } from "../lib/api"
-import {
-  CATEGORIES,
-  CATEGORY_ICON,
-  DEFAULT_NOTE,
-  NOTE_PLACEHOLDER,
-  RECEIPT_OPTIONAL,
-} from "../lib/expenseCategories"
+import { useManagerSession } from "../lib/session"
+import type { ExpenseItem, ExpensePatch } from "../lib/api"
+import { categoryIcon, defaultNote, notePlaceholder } from "../lib/expenseCategories"
 import { BranchTag, FormField, inputBad, inputBase, inputOk } from "../components/ui"
 import { Select } from "../components/Select"
 import { ReceiptUploader } from "../components/ReceiptUploader"
@@ -27,10 +21,10 @@ type FieldErrors = { amount?: string; receipt?: string }
 /* An expense queued in the form but not yet sent */
 type DraftLine = {
   id: string
-  category: ExpenseCategory
+  category: string
   note: string
   amount: number
-  time: string
+  timeLabel: string
   receipts: File[]
 }
 
@@ -50,7 +44,8 @@ function ExpenseRow({
   onEdit: () => void
   onDelete: () => void
 }) {
-  const RowIcon = CATEGORY_ICON[item.category]
+  const RowIcon = categoryIcon(item.category)
+  const receiptCount = item.receiptUrls.length
   return (
     <li className="flex items-center gap-3 px-5 py-3">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sage text-sage-ink">
@@ -60,14 +55,14 @@ function ExpenseRow({
         <span className="block truncate text-[14px] font-medium text-ink-soft">{item.note}</span>
         <span className="flex items-center gap-1 text-[12px] text-mute">
           <span className="truncate">
-            {item.category} · {item.time}
+            {item.category} · {clockLabel(new Date(item.at))}
           </span>
-          {item.receiptCount > 0 && (
+          {receiptCount > 0 && (
             <span className="flex shrink-0 items-center gap-0.5">
               <PaperclipIcon size={12} weight="bold" aria-hidden="true" />
-              {item.receiptCount > 1 && <span className="tabular-nums">{item.receiptCount}</span>}
+              {receiptCount > 1 && <span className="tabular-nums">{receiptCount}</span>}
               <span className="sr-only">
-                {item.receiptCount} {item.receiptCount === 1 ? "receipt" : "receipts"} attached
+                {receiptCount} {receiptCount === 1 ? "receipt" : "receipts"} attached
               </span>
             </span>
           )}
@@ -87,13 +82,25 @@ function ExpenseRow({
   )
 }
 
+/** One retry line for a read that failed — the sample-data era never needed one */
+function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <p role="alert" className="flex flex-wrap items-center gap-2 px-5 pb-4 pt-2 text-[13px] text-claret">
+      {message}
+      <button type="button" onClick={onRetry} className="font-medium underline underline-offset-4">
+        Try again
+      </button>
+    </p>
+  )
+}
+
 export default function ExpensesPage() {
-  const { store } = useSession()
+  const { store } = useManagerSession()
   const { showToast } = useToast()
   const storeId = store.id
   const [dayValue, setDayValue] = useState(() => dayKey(new Date()))
   const [amount, setAmount] = useState("")
-  const [category, setCategory] = useState<ExpenseCategory>("Meals")
+  const [pickedCategory, setPickedCategory] = useState<string | null>(null)
   const [note, setNote] = useState("")
   const [receipts, setReceipts] = useState<ReceiptEntry[]>([])
   const [errors, setErrors] = useState<FieldErrors>({})
@@ -103,6 +110,11 @@ export default function ExpensesPage() {
 
   const today = new Date()
   const todayKey = dayKey(today)
+
+  /* What managers may pick from is the server's list — the owner edits it */
+  const categoriesApi = useApi(() => api.expenseCategories(), [])
+  const categories = categoriesApi.data ?? []
+  const category = pickedCategory ?? categories[0]?.name ?? ""
 
   /*
    * A day can still take expenses until its deposit is recorded — once a day is
@@ -138,7 +150,7 @@ export default function ExpensesPage() {
   const items = itemsFor(selectedDay)
   const selectedTotal = items.reduce((sum, i) => sum + i.amount, 0)
 
-  const receiptOptional = RECEIPT_OPTIONAL.includes(category)
+  const receiptOptional = categories.find((c) => c.name === category)?.receiptExempt ?? false
   const draftTotal = draft.reduce((sum, l) => sum + l.amount, 0)
   const formFilled = amount.trim() !== ""
   const queuedCount = draft.length + (formFilled ? 1 : 0)
@@ -154,15 +166,17 @@ export default function ExpensesPage() {
   }
 
   function buildLine(): DraftLine | null {
+    if (!category) return null
     const next = validate()
     setErrors(next)
     if (Object.keys(next).length > 0) return null
     return {
       id: `line-${Date.now().toString(36)}-${draft.length}`,
       category,
-      note: note.trim() || DEFAULT_NOTE[category],
-      amount: Math.round(Number(amount.replace(/,/g, ""))),
-      time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+      note: note.trim() || defaultNote(category),
+      // To the centavo, never to the peso — receipts carry centavos
+      amount: Math.round(Number(amount.replace(/,/g, "")) * 100) / 100,
+      timeLabel: clockLabel(new Date()),
       receipts: receipts.map((r) => r.file).filter((f): f is File => f !== null),
     }
   }
@@ -197,44 +211,54 @@ export default function ExpensesPage() {
     if (lines.length === 0) return
 
     setSaving(true)
-    // One batch call — the whole evening's spend is a single write
-    await api.addExpenses(
-      lines.map((l) => ({
-        storeId,
-        day: selectedKey,
-        category: l.category,
-        note: l.note,
-        amount: l.amount,
-        receipts: l.receipts,
-      })),
-    )
-    expenses.reload()
-    setDraft([])
-    clearFields()
-    setSaving(false)
-    showToast(
-      `${lines.length} ${lines.length === 1 ? "expense" : "expenses"} saved to ${
-        isToday ? "today" : shortDate(selectedDay)
-      }.`,
-    )
+    try {
+      // One batch call — the whole evening's spend is a single write
+      await api.addExpenses(
+        lines.map((l) => ({
+          storeId,
+          day: selectedKey,
+          category: l.category,
+          note: l.note,
+          amount: l.amount,
+          receipts: l.receipts,
+        })),
+      )
+      expenses.reload()
+      setDraft([])
+      clearFields()
+      showToast(
+        `${lines.length} ${lines.length === 1 ? "expense" : "expenses"} saved to ${
+          isToday ? "today" : shortDate(selectedDay)
+        }.`,
+      )
+    } catch (err) {
+      // The draft stays — nothing typed is lost to a dropped connection
+      showToast(err instanceof ApiError ? err.message : "Saving failed. Try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function deleteItem(item: ExpenseItem) {
-    await api.deleteExpense(item.id)
-    expenses.reload()
-    showToast(`Deleted ${item.note}.`)
+    try {
+      await api.deleteExpense(item.id)
+      expenses.reload()
+      showToast(`Deleted ${item.note}.`)
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Deleting failed. Try again.")
+    }
   }
 
-  async function saveEdit(updated: ExpenseItem, files: File[]) {
-    await api.updateExpense(updated.id, {
-      category: updated.category,
-      note: updated.note,
-      amount: updated.amount,
-      ...(files.length > 0 ? { receipts: files } : {}),
-    })
-    expenses.reload()
-    setEditing(null)
-    showToast(`Updated ${updated.note}.`)
+  async function saveEdit(item: ExpenseItem, patch: ExpensePatch) {
+    try {
+      await api.updateExpense(item.id, patch)
+      expenses.reload()
+      setEditing(null)
+      showToast(`Updated ${patch.note ?? item.note}.`)
+    } catch (err) {
+      setEditing(null)
+      showToast(err instanceof ApiError ? err.message : "The change did not save. Try again.")
+    }
   }
 
   const saveLabel = saving
@@ -268,6 +292,19 @@ export default function ExpensesPage() {
           <p className="mt-0.5 text-[13px] text-mute">
             Add each one, then save the whole day in a single go.
           </p>
+
+          {categoriesApi.error && (
+            <p role="alert" className="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-claret">
+              The categories could not load, so nothing can be logged yet.
+              <button
+                type="button"
+                onClick={categoriesApi.reload}
+                className="font-medium underline underline-offset-4"
+              >
+                Try again
+              </button>
+            </p>
+          )}
 
           <form onSubmit={handleAdd} noValidate className="mt-4 space-y-4">
             <FormField
@@ -315,8 +352,8 @@ export default function ExpensesPage() {
                     id="expense-category"
                     ariaLabel="Category"
                     value={category}
-                    onChange={(v) => setCategory(v as ExpenseCategory)}
-                    options={CATEGORIES.map((c) => ({ value: c, label: c }))}
+                    onChange={setPickedCategory}
+                    options={categories.map((c) => ({ value: c.name, label: c.name }))}
                   />
                 </div>
               </FormField>
@@ -327,7 +364,7 @@ export default function ExpensesPage() {
                 id="expense-note"
                 type="text"
                 enterKeyHint="done"
-                placeholder={NOTE_PLACEHOLDER[category]}
+                placeholder={notePlaceholder(category)}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 className={`${inputBase} ${inputOk}`}
@@ -339,7 +376,7 @@ export default function ExpensesPage() {
               label={receiptOptional ? "Receipts (optional)" : "Receipts"}
               hint={
                 receiptOptional
-                  ? "Not required for staff meals and merienda"
+                  ? "Not required for company-covered categories"
                   : "Add up to 5 — camera or gallery"
               }
               entries={receipts}
@@ -349,7 +386,7 @@ export default function ExpensesPage() {
 
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || !category}
               className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-line-strong text-[14.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03] disabled:pointer-events-none disabled:opacity-60"
             >
               <PlusIcon size={16} weight="bold" aria-hidden="true" />
@@ -369,7 +406,7 @@ export default function ExpensesPage() {
               </div>
               <ul className="divide-y divide-line">
                 {draft.map((line) => {
-                  const LineIcon = CATEGORY_ICON[line.category]
+                  const LineIcon = categoryIcon(line.category)
                   return (
                     <li key={line.id} className="flex items-center gap-3 px-4 py-2.5">
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sage text-sage-ink">
@@ -408,7 +445,7 @@ export default function ExpensesPage() {
           <div className="mt-4">
             <button
               type="button"
-              onClick={handleSaveAll}
+              onClick={() => void handleSaveAll()}
               disabled={saving || queuedCount === 0}
               className="flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
             >
@@ -434,9 +471,14 @@ export default function ExpensesPage() {
               Not deposited yet, so anything here can still be corrected or removed.
             </p>
           </div>
-          {items.length === 0 ? (
+          {expenses.error ? (
+            <LoadError
+              message="The day's expenses could not load."
+              onRetry={expenses.reload}
+            />
+          ) : items.length === 0 ? (
             <p className="px-5 pb-6 pt-2 text-[13.5px] text-mute">
-              No expenses logged for this day yet.
+              {expenses.loading ? "Loading…" : "No expenses logged for this day yet."}
             </p>
           ) : (
             <ul className="mt-1 divide-y divide-line">
@@ -445,7 +487,7 @@ export default function ExpensesPage() {
                   key={item.id}
                   item={item}
                   onEdit={() => setEditing(item)}
-                  onDelete={() => deleteItem(item)}
+                  onDelete={() => void deleteItem(item)}
                 />
               ))}
             </ul>
@@ -458,65 +500,70 @@ export default function ExpensesPage() {
               one to log against it.
             </p>
           </div>
-          <ul className="mt-1 divide-y divide-line">
-            {eligibleDays.map((d) => {
-              const active = dayKey(d) === selectedKey
-              const total = totalFor(d)
-              const missing = total === 0
-              return (
-                <li key={dayKey(d)}>
-                  <button
-                    type="button"
-                    onClick={() => setDayValue(dayKey(d))}
-                    aria-current={active ? "true" : undefined}
-                    className={`flex w-full items-center justify-between gap-3 px-5 py-2.5 text-left transition-colors duration-200 ease-quiet ${
-                      active ? "bg-sage" : "hover:bg-black/[0.03]"
-                    }`}
-                  >
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      {missing && (
-                        <>
-                          <WarningCircleIcon
-                            size={14}
-                            weight="fill"
-                            aria-hidden="true"
-                            className="shrink-0 text-claret"
-                          />
-                          <span className="sr-only">Nothing logged.</span>
-                        </>
-                      )}
-                      <span
-                        className={`truncate text-[13.5px] ${
-                          active ? "font-medium text-sage-ink" : "text-ink-soft"
-                        }`}
-                      >
-                        {dayLabel(d)}
-                      </span>
-                    </span>
-                    <span
-                      className={`shrink-0 text-[13px] tabular-nums ${
-                        missing
-                          ? "font-medium text-claret"
-                          : active
-                            ? "font-medium text-sage-ink"
-                            : "text-mute"
+          {pending.error ? (
+            <LoadError message="The open days could not load." onRetry={pending.reload} />
+          ) : (
+            <ul className="mt-1 divide-y divide-line">
+              {eligibleDays.map((d) => {
+                const active = dayKey(d) === selectedKey
+                const total = totalFor(d)
+                const missing = total === 0
+                return (
+                  <li key={dayKey(d)}>
+                    <button
+                      type="button"
+                      onClick={() => setDayValue(dayKey(d))}
+                      aria-current={active ? "true" : undefined}
+                      className={`flex w-full items-center justify-between gap-3 px-5 py-2.5 text-left transition-colors duration-200 ease-quiet ${
+                        active ? "bg-sage" : "hover:bg-black/[0.03]"
                       }`}
                     >
-                      {missing ? "Nothing logged" : peso.format(total)}
-                    </span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        {missing && (
+                          <>
+                            <WarningCircleIcon
+                              size={14}
+                              weight="fill"
+                              aria-hidden="true"
+                              className="shrink-0 text-claret"
+                            />
+                            <span className="sr-only">Nothing logged.</span>
+                          </>
+                        )}
+                        <span
+                          className={`truncate text-[13.5px] ${
+                            active ? "font-medium text-sage-ink" : "text-ink-soft"
+                          }`}
+                        >
+                          {dayLabel(d)}
+                        </span>
+                      </span>
+                      <span
+                        className={`shrink-0 text-[13px] tabular-nums ${
+                          missing
+                            ? "font-medium text-claret"
+                            : active
+                              ? "font-medium text-sage-ink"
+                              : "text-mute"
+                        }`}
+                      >
+                        {missing ? "Nothing logged" : peso.format(total)}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </section>
       </div>
 
       <ExpenseDialog
         key={editing?.id}
         item={editing}
+        categories={categories}
         dayLabel={dayLabel(selectedDay)}
-        onSave={saveEdit}
+        onSave={(item, patch) => void saveEdit(item, patch)}
         onClose={() => setEditing(null)}
       />
     </>

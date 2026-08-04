@@ -21,28 +21,37 @@ export function AvatarField({
   id,
   name,
   file,
+  existingUrl = null,
   onChange,
+  onRemoveExisting,
   hint,
 }: {
   id: string
   name: string
   file: File | null
+  /** Photo already stored by the backend, shown until a new file replaces it */
+  existingUrl?: string | null
   onChange: (file: File | null) => void
+  /** Called when the stored photo itself is removed */
+  onRemoveExisting?: () => void
   hint?: string
 }) {
-  const [preview, setPreview] = useState<string | null>(null)
+  const [filePreview, setFilePreview] = useState<string | null>(null)
   const marksRef = useRef<HTMLSpanElement>(null)
   const letters = initials(name)
 
   useEffect(() => {
     if (!file) {
-      setPreview(null)
+      setFilePreview(null)
       return
     }
     const url = URL.createObjectURL(file)
-    setPreview(url)
+    setFilePreview(url)
     return () => URL.revokeObjectURL(url)
   }, [file])
+
+  /* The new file wins over the stored photo; the stored one wins over initials */
+  const preview = filePreview ?? existingUrl
 
   useGSAP(
     () => {
@@ -105,10 +114,17 @@ export function AvatarField({
             className={`${actionClass} peer-focus-visible:border-brand-deep peer-focus-visible:shadow-[0_0_0_2px_rgba(30,125,27,0.8)]`}
           >
             <CameraIcon size={15} aria-hidden="true" />
-            {file ? "Replace" : "Add photo"}
+            {preview ? "Replace" : "Add photo"}
           </label>
-          {file && (
-            <button type="button" onClick={() => onChange(null)} className={actionClass}>
+          {preview && (
+            <button
+              type="button"
+              onClick={() => {
+                if (file) onChange(null)
+                else onRemoveExisting?.()
+              }}
+              className={actionClass}
+            >
               Remove
             </button>
           )}

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import type { SubmitEvent } from "react"
 import { CheckCircleIcon, SpinnerGapIcon, WarningCircleIcon } from "@phosphor-icons/react"
 import { peso, rowDate, shortDate } from "../lib/format"
-import { api } from "../lib/api"
+import { ApiError, api } from "../lib/api"
 import { useApi } from "../lib/useApi"
 import { addDays, dayKey, fromDayKey, startOfDay } from "../lib/dateRange"
 import {
@@ -20,19 +20,21 @@ import { inspectSlip } from "../lib/slipCheck"
 import type { KnownSlip, SlipReport } from "../lib/slipCheck"
 import { readSlip } from "../lib/slipRead"
 import type { SlipFields } from "../lib/slipRead"
-import { useSession } from "../lib/session"
+import { useManagerSession } from "../lib/session"
 import { useToast } from "../lib/toast"
 
 type FieldErrors = {
   amount?: string
+  date?: string
   reference?: string
   days?: string
   slip?: string
   reason?: string
 }
 
-/* Branches usually deposit at least this often; past it, the backlog is flagged */
-const BATCH_WINDOW_DAYS = 3
+/* Money compares in centavos — float equality on peso sums invents
+   discrepancies out of rounding dust */
+const cents = (v: number) => Math.round(v * 100)
 
 /*
  * A mismatch can never be closed silently, so the reason is the one field that
@@ -65,7 +67,7 @@ function StatusChip({ matched }: { matched: boolean }) {
 }
 
 export default function DepositsPage() {
-  const { store } = useSession()
+  const { store } = useManagerSession()
   const { showToast } = useToast()
   const storeId = store.id
   const [checkedDays, setCheckedDays] = useState<Record<string, boolean>>({})
@@ -96,6 +98,10 @@ export default function DepositsPage() {
   const expectedByDay = new Map(pendingAudits.map((a) => [a.day, a.expected]))
   const pendingDays = pendingAudits.map((a) => fromDayKey(a.day))
 
+  /* The owner sets how many days may batch into one deposit; 3 until it loads */
+  const rules = useApi(() => api.reconciliationRules(), [])
+  const batchWindowDays = rules.data?.batchWindowDays ?? 3
+
   /* Deposits already filed for this branch, back far enough to show the
      recent ones the reconciliation refers to */
   const history = useApi(
@@ -117,9 +123,11 @@ export default function DepositsPage() {
   const amountValue = Number(amount.replace(/,/g, ""))
   const showMatch =
     amount.trim() !== "" && Number.isFinite(amountValue) && amountValue > 0 && selectedDays.length > 0
-  /* Signed: positive is over, negative is short. Zero while there is nothing
-     to compare, so the discrepancy form only appears once both sides exist. */
-  const mismatch = showMatch ? Math.round(amountValue) - selectedTotal : 0
+  /* Signed centavos: positive is over, negative is short. Zero while there is
+     nothing to compare, so the discrepancy form only appears once both sides
+     exist. Centavos, because an exactly-right ₱12,345.50 must read as a match. */
+  const mismatchCents = showMatch ? cents(amountValue) - cents(selectedTotal) : 0
+  const mismatchAbs = Math.abs(mismatchCents) / 100
 
   const recorded: RecordedDeposit[] = (history.data ?? []).map((d) => {
     const days = d.covers.map(fromDayKey)
@@ -202,6 +210,8 @@ export default function DepositsPage() {
     const value = Number(amount.replace(/,/g, ""))
     if (!amount.trim()) next.amount = "Enter the amount deposited."
     else if (!Number.isFinite(value) || value <= 0) next.amount = "Enter an amount above zero."
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(depositDate)) next.date = "Enter the deposit date."
+    else if (depositDate > dayKey(today)) next.date = "The deposit date cannot be in the future."
     if (!reference.trim()) next.reference = "Enter the reference number from the bank."
     if (selectedDays.length === 0) next.days = "Select at least one day this deposit covers."
 
@@ -212,10 +222,10 @@ export default function DepositsPage() {
        over a wrong focus reading is worse than a slip the owner asks again for. */
     else if (slipReport?.level === "fail") next.slip = slipReport.headline
 
-    if (mismatch !== 0 && reason.trim().length < REASON_MIN) {
+    if (mismatchCents !== 0 && reason.trim().length < REASON_MIN) {
       next.reason = reason.trim()
         ? `Say a little more — at least ${REASON_MIN} characters.`
-        : `Explain the ${peso.format(Math.abs(mismatch))} difference before recording this.`
+        : `Explain the ${peso.format(mismatchAbs)} difference before recording this.`
     }
     return next
   }
@@ -227,33 +237,47 @@ export default function DepositsPage() {
     if (Object.keys(next).length > 0) return
 
     setSaving(true)
-    const value = Math.round(Number(amount.replace(/,/g, "")))
+    // To the centavo, never to the peso — the amount must echo the slip exactly
+    const value = cents(Number(amount.replace(/,/g, ""))) / 100
     const covers =
       selectedDays.length === 1
         ? `Covers ${shortDate(selectedDays[0])}`
         : `Covers ${shortDate(selectedDays[0])} to ${shortDate(selectedDays[selectedDays.length - 1])}`
 
-    await api.recordDeposit({
-      storeId,
-      day: depositDate,
-      amount: value,
-      reference: reference.trim(),
-      covers: selectedDays.map((d) => dayKey(d)),
-      slip: slip as File,
-      slipSha: slipReport?.sha ?? "",
-      slipPhash: slipReport?.phash ?? "",
-      ...(mismatch !== 0
-        ? {
-            discrepancy: {
-              reason: reason.trim(),
-              proof: proof.map((p) => p.file).filter((f): f is File => f !== null),
-            },
-          }
-        : {}),
-    })
+    try {
+      await api.recordDeposit({
+        storeId,
+        day: depositDate,
+        amount: value,
+        reference: reference.trim(),
+        covers: selectedDays.map((d) => dayKey(d)),
+        slip: slip as File,
+        // Advisory only — absent when the device could not compute them
+        ...(slipReport?.sha ? { slipSha: slipReport.sha } : {}),
+        ...(slipReport?.phash ? { slipPhash: slipReport.phash } : {}),
+        ...(mismatchCents !== 0
+          ? {
+              discrepancy: {
+                reason: reason.trim(),
+                proof: proof.map((p) => p.file).filter((f): f is File => f !== null),
+              },
+            }
+          : {}),
+      })
+    } catch (err) {
+      /* The form stays filled — a dropped connection must not cost the typing */
+      if (err instanceof ApiError && err.fields) {
+        // The wire calls the date field `day`; the form slot is `date`
+        const { day, ...rest } = err.fields
+        setErrors({ ...rest, ...(day ? { date: day } : {}) })
+      }
+      showToast(err instanceof ApiError ? err.message : "Recording failed. Try again.")
+      setSaving(false)
+      return
+    }
     pending.reload()
     history.reload()
-    const shortfall = value - selectedTotal
+    const shortfallCents = cents(value) - cents(selectedTotal)
     // Remember this slip so the same photo cannot cover a second deposit
     if (slipReport) {
       const filed: KnownSlip = {
@@ -270,9 +294,9 @@ export default function DepositsPage() {
     setProof([])
     setSaving(false)
     showToast(
-      shortfall === 0
+      shortfallCents === 0
         ? `${peso.format(value)} recorded · ${covers.replace(/^Covers /, "covers ")}.`
-        : `Recorded with a discrepancy — ${peso.format(Math.abs(shortfall))} ${shortfall > 0 ? "over" : "short"}.`,
+        : `Recorded with a discrepancy — ${peso.format(Math.abs(shortfallCents) / 100)} ${shortfallCents > 0 ? "over" : "short"}.`,
     )
   }
 
@@ -303,18 +327,32 @@ export default function DepositsPage() {
           <p className="mt-0.5 text-[13px] text-mute">
             Audited days not yet covered by a bank deposit.
           </p>
-          {pendingDays.length > BATCH_WINDOW_DAYS && (
+          {pendingDays.length > batchWindowDays && (
             <p className="mt-1.5 flex items-center gap-1.5 text-[13px] text-claret">
               <WarningCircleIcon size={15} weight="fill" aria-hidden="true" />
               {pendingDays.length} days waiting — deposits are usually made every{" "}
-              {BATCH_WINDOW_DAYS} days.
+              {batchWindowDays} days.
             </p>
           )}
         </div>
-        {pendingDays.length === 0 ? (
+        {pending.error ? (
+          /* A failed read must never pass for a clean slate — "all covered"
+             on error is a false all-clear */
+          <p role="alert" className="flex flex-wrap items-center gap-2 px-5 pb-5 pt-2 text-[13px] text-claret">
+            The days waiting for a deposit could not load.
+            <button
+              type="button"
+              onClick={pending.reload}
+              className="font-medium underline underline-offset-4"
+            >
+              Try again
+            </button>
+          </p>
+        ) : pendingDays.length === 0 ? (
           <p className="px-5 pb-5 pt-2 text-[13.5px] text-mute">
-            All audited days are covered. Today is still open and will show here once the day is
-            closed.
+            {pending.loading
+              ? "Loading…"
+              : "All audited days are covered. Today is still open and will show here once the day is closed."}
           </p>
         ) : (
           <>
@@ -400,10 +438,10 @@ export default function DepositsPage() {
                 <p
                   role="status"
                   className={`mt-1.5 flex items-center gap-1.5 text-[13px] ${
-                    mismatch === 0 ? "text-sage-ink" : "text-claret"
+                    mismatchCents === 0 ? "text-sage-ink" : "text-claret"
                   }`}
                 >
-                  {mismatch === 0 ? (
+                  {mismatchCents === 0 ? (
                     <>
                       <CheckCircleIcon size={15} weight="fill" aria-hidden="true" />
                       Matches the expected total for the selected days.
@@ -411,7 +449,7 @@ export default function DepositsPage() {
                   ) : (
                     <>
                       <WarningCircleIcon size={15} weight="fill" aria-hidden="true" />
-                      {peso.format(Math.abs(mismatch))} {mismatch > 0 ? "over" : "short"} of{" "}
+                      {peso.format(mismatchAbs)} {mismatchCents > 0 ? "over" : "short"} of{" "}
                       {peso.format(selectedTotal)}.
                     </>
                   )}
@@ -422,6 +460,7 @@ export default function DepositsPage() {
               id="deposit-date"
               label="Deposit date"
               hint={fromSlip.date ? "Read from the slip." : undefined}
+              error={errors.date}
             >
               <input
                 id="deposit-date"
@@ -432,7 +471,9 @@ export default function DepositsPage() {
                   setDepositDate(e.target.value)
                   setFromSlip((f) => ({ ...f, date: false }))
                 }}
-                className={`${inputBase} ${inputOk}`}
+                aria-invalid={Boolean(errors.date)}
+                aria-describedby={errors.date ? "deposit-date-error" : undefined}
+                className={`${inputBase} ${errors.date ? inputBad : inputOk}`}
               />
             </FormField>
           </div>
@@ -598,16 +639,16 @@ export default function DepositsPage() {
             A mismatch can never be closed silently, so the form appears the
             moment the figures disagree rather than after a failed submit.
           */}
-          {mismatch !== 0 && (
+          {mismatchCents !== 0 && (
             <div className="rounded-lg border border-claret/40 bg-claret/[0.03] p-4">
               <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-claret">
                 <WarningCircleIcon size={16} weight="fill" aria-hidden="true" />
-                Discrepancy — {peso.format(Math.abs(mismatch))} {mismatch > 0 ? "over" : "short"}
+                Discrepancy — {peso.format(mismatchAbs)} {mismatchCents > 0 ? "over" : "short"}
               </h3>
               <p className="mt-1 text-[12.5px] leading-[1.5] text-ink-soft">
                 {peso.format(selectedTotal)} was expected for{" "}
                 {selectedDays.length === 1 ? "this day" : `these ${selectedDays.length} days`} and{" "}
-                {peso.format(Math.round(amountValue))} was deposited. This cannot be recorded until
+                {peso.format(cents(amountValue) / 100)} was deposited. This cannot be recorded until
                 the difference is explained.
               </p>
 
@@ -674,6 +715,22 @@ export default function DepositsPage() {
         <div className="px-5 pb-1 pt-4">
           <h2 className="text-[15px] font-semibold text-ink">Recent deposits</h2>
         </div>
+        {history.error ? (
+          <p role="alert" className="flex flex-wrap items-center gap-2 px-5 pb-5 pt-2 text-[13px] text-claret">
+            Recent deposits could not load.
+            <button
+              type="button"
+              onClick={history.reload}
+              className="font-medium underline underline-offset-4"
+            >
+              Try again
+            </button>
+          </p>
+        ) : recorded.length === 0 ? (
+          <p className="px-5 pb-5 pt-2 text-[13.5px] text-mute">
+            {history.loading ? "Loading…" : "Deposits recorded here will show up in this list."}
+          </p>
+        ) : (
         <ul className="mt-1 divide-y divide-line">
           {recorded.map((dep) => (
             <li key={dep.id} className="flex items-center gap-3 px-5 py-3">
@@ -690,6 +747,7 @@ export default function DepositsPage() {
             </li>
           ))}
         </ul>
+        )}
         </section>
       </div>
 

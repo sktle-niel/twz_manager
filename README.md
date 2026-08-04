@@ -4,12 +4,14 @@ Daily sales audit and bank-deposit reconciliation for **Two Wheels Zone**, a mul
 motorcycle shop. It pulls each branch's sales from Loyverse POS, deducts the expenses the branch
 logged that day, and checks every bank deposit against what the branch actually owed.
 
-> **Status: front end only.** Every figure in the app is deterministic sample data, seeded from
-> the branch id and the date, so the same day always shows the same numbers. There is no backend
-> yet: no authentication, no Loyverse integration, no persistence.
+> **Status: front end only, backend-ready.** Every figure in the app is deterministic sample
+> data, seeded from the branch id and the date, so the same day always shows the same numbers.
+> There is no backend yet — but the full auth flow (sign-in, roles, sign-out, session expiry),
+> every write, and every error path is wired to the contract a backend will implement.
 >
-> `src/lib/api/` is the seam where a backend plugs in — `contracts.ts` states what it must
-> implement, and `VITE_DATA_SOURCE` chooses between the real client and the sample adapter.
+> `src/lib/api/` is the seam where that backend plugs in — `contracts.ts` states what it must
+> implement, [`docs/API.md`](docs/API.md) is the endpoint-by-endpoint spec to build from, and
+> `VITE_DATA_SOURCE` chooses between the real client and the sample adapter.
 > [`docs/LOYVERSE.md`](docs/LOYVERSE.md) is the POS integration study.
 
 ## The problem it replaces
@@ -73,13 +75,14 @@ npm run build    # tsc -b && vite build
 npm run lint
 ```
 
-Sign-in accepts any username or Gmail and resolves it against the sample accounts — try
-`marvin.deocampo` (Arevalo), `joel.sarabia` (Molo), or `rhea.villanueva` (Jaro) to switch which
-branch you are looking at. Anything unrecognised falls back to the first account.
+In sample mode you boot signed in as the first manager; sign out to see the login flow. Known
+accounts are `marvin.deocampo` (Arevalo), `joel.sarabia` (Molo), `rhea.villanueva` (Jaro), and
+**`twz.owner`** for the owner side — any password of 6+ characters works. Unknown identifiers are
+rejected, the way a real backend would.
 
-The owner area has no entry point in the UI yet — sign-in always lands on the manager side, so
-open **`/admin`** directly to see it. Which side an account gets is a routing decision for the
-auth backend, and there is no role check to make it with.
+The routes are role-guarded: a manager account lands on `/` and cannot open `/admin`; the owner
+lands on `/admin` and cannot open the manager side; signed out, everything walks you to
+`/login`.
 
 ## Stack
 
@@ -104,7 +107,7 @@ src/
     useApi.ts     one read, with loading/error/reload
     notices.ts    what a branch needs to act on
     dateRange.ts  the shared range model behind both charts
-    session.ts    the signed-in manager and their branch
+    session.ts    useAuth for the login page and guards; narrowed per-role hooks for pages
     motion.ts     GSAP tokens, the reduced-motion opt-out, and the shared hooks
     format.ts     peso, dates, relative times
 ```

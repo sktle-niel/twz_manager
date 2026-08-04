@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import AppShell from "./components/AppShell"
 import AdminShell from "./components/AdminShell"
+import { RequireManager, RequireOwner } from "./components/RequireRole"
 import { ScrollToTop } from "./components/ScrollToTop"
 import { SessionProvider } from "./components/SessionProvider"
 import { ToastProvider } from "./components/ToastProvider"
@@ -28,19 +29,24 @@ function App() {
         <SessionProvider>
         <Suspense fallback={<div className="min-h-[100dvh]" aria-busy="true" />}>
           <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/expenses" element={<ExpensesPage />} />
-            <Route path="/deposits" element={<DepositsPage />} />
-            <Route path="/history" element={<HistoryPage />} />
-            <Route path="/account" element={<AccountPage />} />
+          {/* Who may enter which side is the guards' decision, not the URL's */}
+          <Route element={<RequireManager />}>
+            <Route element={<AppShell />}>
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/expenses" element={<ExpensesPage />} />
+              <Route path="/deposits" element={<DepositsPage />} />
+              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/account" element={<AccountPage />} />
+            </Route>
           </Route>
-          <Route path="/admin" element={<AdminShell />}>
-            <Route index element={<AdminOverviewPage />} />
-            <Route path="history" element={<AdminHistoryPage />} />
-            <Route path="managers" element={<AdminManagersPage />} />
-            <Route path="settings" element={<AdminSettingsPage />} />
-            <Route path="account" element={<AdminAccountPage />} />
+          <Route path="/admin" element={<RequireOwner />}>
+            <Route element={<AdminShell />}>
+              <Route index element={<AdminOverviewPage />} />
+              <Route path="history" element={<AdminHistoryPage />} />
+              <Route path="managers" element={<AdminManagersPage />} />
+              <Route path="settings" element={<AdminSettingsPage />} />
+              <Route path="account" element={<AdminAccountPage />} />
+            </Route>
           </Route>
           <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -25,8 +25,6 @@ export type Notice = {
 /* Alerts first, then what is merely worth knowing, then what is already fine */
 const TONE_ORDER: Record<NoticeTone, number> = { alert: 0, info: 1, ok: 2 }
 
-/* Branches deposit daily or batch up to every ~3 days; past that is a backlog */
-const DEPOSIT_BATCH_DAYS = 3
 /* How far back a short deposit still counts as news worth surfacing */
 const DISCREPANCY_WINDOW = 14
 /* A sign-in from another device stays on the card this long */
@@ -45,7 +43,7 @@ export async function branchNotices({
   const todayKey = dayKey(today)
   const notices: Notice[] = []
 
-  const [todayExpenses, pending, recent, hours, signIns] = await Promise.all([
+  const [todayExpenses, pending, recent, hours, signIns, rules] = await Promise.all([
     api.expenses(storeId, { from: todayKey, to: todayKey }),
     api.pendingDeposits(storeId),
     api.dayAudits([storeId], {
@@ -54,7 +52,11 @@ export async function branchNotices({
     }),
     api.hourlySales([storeId], todayKey),
     api.signIns(managerId),
+    api.reconciliationRules(),
   ])
+
+  /* The owner sets how many days may batch into one deposit */
+  const batchWindowDays = rules.batchWindowDays
 
   // Today's spend — the one thing the branch owes the app every single day
   const todaySpend = todayExpenses.reduce((sum, i) => sum + i.amount, 0)
@@ -97,7 +99,7 @@ export async function branchNotices({
   if (pending.length > 0) {
     const due = pending.reduce((sum, a) => sum + a.expected, 0)
     const since = rowDate(fromDayKey(pending[0].day))
-    const late = pending.length > DEPOSIT_BATCH_DAYS
+    const late = pending.length > batchWindowDays
     notices.push({
       id: "deposit-backlog",
       tone: late ? "alert" : "info",
@@ -105,23 +107,25 @@ export async function branchNotices({
         ? `${pending.length} days waiting for deposit`
         : `${pending.length} day${pending.length === 1 ? "" : "s"} ready to deposit`,
       detail: late
-        ? `${peso.format(due)} due since ${since} — past the usual 3-day window.`
+        ? `${peso.format(due)} due since ${since} — past the usual ${batchWindowDays}-day window.`
         : `${peso.format(due)} due since ${since}.`,
       to: "/deposits",
       action: "Record deposit",
     })
   }
 
-  // The most recent deposit that came up short, if there is one
-  const short = [...recent]
+  // The most recent deposit that did not match, if there is one
+  const off = [...recent]
     .sort((a, b) => (a.day < b.day ? 1 : -1))
     .find((a) => a.status === "discrepancy" && a.deposited !== null)
-  if (short && short.deposited !== null) {
+  if (off && off.deposited !== null) {
+    /* Centavos, then named by sign — "short by -₱180" reads as a bug */
+    const diffCents = Math.round(off.deposited * 100) - Math.round(off.expected * 100)
     notices.push({
       id: "discrepancy",
       tone: "alert",
-      title: `Deposit short by ${peso.format(short.expected - short.deposited)}`,
-      detail: `${rowDate(fromDayKey(short.day))} · reference ${short.reference}.`,
+      title: `Deposit ${diffCents < 0 ? "short" : "over"} by ${peso.format(Math.abs(diffCents) / 100)}`,
+      detail: `${rowDate(fromDayKey(off.day))} · reference ${off.reference}.`,
       to: "/history",
       action: "View in history",
     })

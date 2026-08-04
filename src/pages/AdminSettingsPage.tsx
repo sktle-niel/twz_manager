@@ -9,10 +9,10 @@ import {
   TagIcon,
 } from "@phosphor-icons/react"
 import type { Icon } from "@phosphor-icons/react"
-import { api } from "../lib/api"
+import { ApiError, api } from "../lib/api"
 import type { ExpenseCategoryConfig } from "../lib/api"
 import { useApi } from "../lib/useApi"
-import { useSession } from "../lib/session"
+import { useOwnerSession } from "../lib/session"
 import { inputBad, inputFlush, inputOk } from "../components/ui"
 import { RowMenu } from "../components/RowMenu"
 import { useToast } from "../lib/toast"
@@ -56,20 +56,29 @@ type Category = ExpenseCategoryConfig
 
 export default function AdminSettingsPage() {
   const { showToast } = useToast()
-  const { stores } = useSession()
+  const { stores } = useOwnerSession()
 
   const loadedCategories = useApi(() => api.expenseCategories(), [])
   const pos = useApi(() => api.posConnection(), [])
   const loadedRules = useApi(() => api.reconciliationRules(), [])
 
   /* Edited locally, then written back in one call — the list is small and a
-     round trip per keystroke would fight the inline rename */
+     round trip per keystroke would fight the inline rename. The write is
+     optimistic: on rejection the list snaps back and the failure is said out
+     loud, so a change that did not survive can never sit there looking saved. */
   const [edits, setEdits] = useState<Category[] | null>(null)
   const categories = edits ?? loadedCategories.data ?? []
   const setCategories = (next: Category[] | ((prev: Category[]) => Category[])) => {
     const value = typeof next === "function" ? next(categories) : next
+    const previous = categories
     setEdits(value)
-    void api.saveExpenseCategories(value)
+    api
+      .saveExpenseCategories(value)
+      .then((saved) => setEdits(saved))
+      .catch((err: unknown) => {
+        setEdits(previous)
+        showToast(err instanceof ApiError ? err.message : "The change did not save. Try again.")
+      })
   }
 
   const [newCategory, setNewCategory] = useState("")
@@ -154,8 +163,12 @@ export default function AdminSettingsPage() {
 
   async function saveRules(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
-    await api.saveReconciliationRules({ batchWindowDays: Number(batchWindow) })
-    showToast(`Batching window set to ${batchWindow} day${batchWindow === "1" ? "" : "s"}.`)
+    try {
+      await api.saveReconciliationRules({ batchWindowDays: Number(batchWindow) })
+      showToast(`Batching window set to ${batchWindow} day${batchWindow === "1" ? "" : "s"}.`)
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "The rules did not save. Try again.")
+    }
   }
 
   return (
@@ -195,19 +208,36 @@ export default function AdminSettingsPage() {
       >
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line px-4 py-3">
           <div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-sage px-2 py-0.5 text-[11px] font-medium text-sage-ink">
-              <CheckCircleIcon size={12} weight="fill" aria-hidden="true" />
-              Connected
-            </span>
+            {pos.data?.connected ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-sage px-2 py-0.5 text-[11px] font-medium text-sage-ink">
+                <CheckCircleIcon size={12} weight="fill" aria-hidden="true" />
+                Connected
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-claret/10 px-2 py-0.5 text-[11px] font-medium text-claret">
+                {pos.loading ? "Checking…" : "Not connected"}
+              </span>
+            )}
             <p className="mt-1.5 text-[12.5px] text-mute">
-              {pos.data?.storesLinked ?? 0} of {stores.length} branches synced · token ending{" "}
-              {pos.data?.tokenHint ?? "—"}
+              {pos.error
+                ? "The connection status could not load."
+                : `${pos.data?.storesLinked ?? 0} of ${stores.length} branches synced · token ending ${pos.data?.tokenHint ?? "—"}`}
             </p>
           </div>
           <button
             type="button"
             onClick={() => {
-              void api.reconnectPos().then(() => showToast("Loyverse connection refreshed."))
+              api
+                .reconnectPos()
+                .then(() => {
+                  pos.reload()
+                  showToast("Loyverse connection refreshed.")
+                })
+                .catch((err: unknown) => {
+                  showToast(
+                    err instanceof ApiError ? err.message : "The reconnect did not go through.",
+                  )
+                })
             }}
             className="flex h-10 items-center justify-center rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
           >

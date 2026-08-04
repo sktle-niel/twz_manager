@@ -1,5 +1,7 @@
 /*
- * Everything the app asks of a backend, in one place.
+ * Everything the app asks of a backend, in one place. docs/API.md is the
+ * endpoint-by-endpoint spec a backend implementer builds from; this file is
+ * the shape the frontend compiles against. They must not drift.
  *
  * Two rules shaped this list:
  *
@@ -26,6 +28,7 @@ import type {
   NewDeposit,
   NewExpense,
   Owner,
+  ProfileInput,
   SignInEvent,
   Store,
 } from "./types"
@@ -36,6 +39,12 @@ export type DayRange = {
   to: DayKey
 }
 
+/**
+ * Who is signed in. Exactly one of the two is set for a signed-in session —
+ * an account is a manager or the owner, never both. Both are null when nobody
+ * is signed in: that is a normal answer, not an error, so `session()` never
+ * fails just because the visitor is anonymous.
+ */
 export type Session = {
   manager: Manager | null
   owner: Owner | null
@@ -46,9 +55,22 @@ export type TwzApi = {
 
   /** Who is signed in. The backend decides from the session cookie. */
   session(): Promise<Session>
-  signIn(identifier: string, password: string): Promise<Session>
+  /**
+   * `remember` asks for a long-lived cookie instead of a browser-session one.
+   * Rejects with 401 and a human message when the credentials are wrong.
+   */
+  signIn(identifier: string, password: string, remember?: boolean): Promise<Session>
   signOut(): Promise<void>
+  /** Sends a reset link if the account exists; resolves either way. */
+  requestPasswordReset(identifier: string): Promise<void>
   signIns(accountId: string): Promise<SignInEvent[]>
+
+  /* ---- the signed-in account ---- */
+
+  /** Updates whoever is signed in; returns the refreshed session. */
+  updateProfile(input: ProfileInput): Promise<Session>
+  /** Rejects with a field error on `current` when the password is wrong. */
+  changePassword(current: string, next: string): Promise<void>
 
   /* ---- branches and accounts ---- */
 
@@ -81,6 +103,7 @@ export type TwzApi = {
   /** Audited days with no deposit against them yet, oldest first */
   pendingDeposits(storeId: string): Promise<DayAudit[]>
   deposits(storeId: string, range: DayRange): Promise<Deposit[]>
+  /** Rejects 409 with a field error on `slip` when the photo already covers a deposit */
   recordDeposit(input: NewDeposit): Promise<Deposit>
 
   /* ---- settings ---- */

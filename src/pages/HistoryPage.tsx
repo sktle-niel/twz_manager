@@ -5,7 +5,7 @@ import { api } from "../lib/api"
 import type { DayStatus } from "../lib/api"
 import { useApi } from "../lib/useApi"
 import { BranchTag, FilterSelect } from "../components/ui"
-import { useSession } from "../lib/session"
+import { useManagerSession } from "../lib/session"
 import { StatCard } from "../components/StatCard"
 import type { Stat } from "../components/StatCard"
 import { Pagination } from "../components/Pagination"
@@ -39,7 +39,7 @@ const PAGE_SIZE = 20
 const MAX_SCAN_DAYS = 400
 
 export default function HistoryPage() {
-  const { store } = useSession()
+  const { store } = useManagerSession()
   const storeId = store.id
   const [preset, setPreset] = useState<RangePreset>("last30")
   const [status, setStatus] = useState<StatusFilter>("all")
@@ -163,7 +163,16 @@ export default function HistoryPage() {
         {audits.loading && rows.length === 0 ? (
           <p className="px-5 py-10 text-center text-[14px] text-mute">Loading…</p>
         ) : audits.error ? (
-          <p className="px-5 py-10 text-center text-[14px] text-claret">{audits.error}</p>
+          <p role="alert" className="flex flex-wrap items-center justify-center gap-2 px-5 py-10 text-center text-[14px] text-claret">
+            {audits.error}
+            <button
+              type="button"
+              onClick={audits.reload}
+              className="font-medium underline underline-offset-4"
+            >
+              Try again
+            </button>
+          </p>
         ) : rows.length === 0 ? (
           <p className="px-5 py-10 text-center text-[14px] text-mute">
             No days match these filters.

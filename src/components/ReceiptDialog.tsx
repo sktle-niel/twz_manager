@@ -9,8 +9,8 @@ import { StatusChip } from "./AuditRow"
 export type ReceiptTarget = { date: Date; branchName: string; audit: DayAudit }
 
 /*
- * The deposit slip behind one audited day. The photo itself only exists once
- * uploads are stored server-side, so the frame says so plainly rather than
+ * The deposit slip behind one audited day. The photo comes from the covering
+ * deposit's stored slip; a day with none yet says so plainly rather than
  * showing a stand-in image that could be mistaken for a real slip.
  */
 export function ReceiptDialog({
@@ -41,7 +41,9 @@ export function ReceiptDialog({
   if (!target) return null
 
   const { date, branchName, audit } = target
-  const difference = (audit.deposited ?? 0) - audit.expected
+  /* Centavos — float dust must not invent an "over by ₱0" row */
+  const differenceCents =
+    Math.round((audit.deposited ?? 0) * 100) - Math.round(audit.expected * 100)
 
   const rows: { label: string; value: string; tone?: "bad" }[] = [
     { label: "Branch", value: branchName },
@@ -50,10 +52,10 @@ export function ReceiptDialog({
     { label: "Expected deposit", value: peso.format(audit.expected) },
     { label: "Amount deposited", value: peso.format(audit.deposited ?? 0) },
   ]
-  if (difference !== 0) {
+  if (differenceCents !== 0) {
     rows.push({
-      label: difference > 0 ? "Over by" : "Short by",
-      value: peso.format(Math.abs(difference)),
+      label: differenceCents > 0 ? "Over by" : "Short by",
+      value: peso.format(Math.abs(differenceCents) / 100),
       tone: "bad",
     })
   }
@@ -96,12 +98,20 @@ export function ReceiptDialog({
         </div>
 
         <div className="px-5 pt-4">
-          <div className="flex aspect-[4/3] flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line-strong bg-canvas">
-            <ReceiptIcon size={26} className="text-mute" aria-hidden="true" />
-            <p className="max-w-[16rem] text-center text-[12.5px] leading-relaxed text-mute">
-              The deposit slip photo appears here once uploads are stored by the backend.
-            </p>
-          </div>
+          {audit.slipUrl ? (
+            <img
+              src={audit.slipUrl}
+              alt={`Deposit slip for ${rowDate(date)}, ${branchName}`}
+              className="max-h-[50dvh] w-full rounded-lg border border-line bg-canvas object-contain"
+            />
+          ) : (
+            <div className="flex aspect-[4/3] flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line-strong bg-canvas">
+              <ReceiptIcon size={26} className="text-mute" aria-hidden="true" />
+              <p className="max-w-[16rem] text-center text-[12.5px] leading-relaxed text-mute">
+                No slip photo is on file for this day yet.
+              </p>
+            </div>
+          )}
         </div>
 
         <dl className="mt-4 divide-y divide-line border-t border-line">

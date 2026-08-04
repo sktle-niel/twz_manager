@@ -5,24 +5,27 @@ import { SignOutIcon } from "@phosphor-icons/react"
 import { FormField, inputBad, inputBase, inputOk } from "../components/ui"
 import { AvatarField } from "../components/AvatarField"
 import { SignInCard } from "../components/SignInCard"
-import { api } from "../lib/api"
+import { ApiError, api } from "../lib/api"
 import { useApi } from "../lib/useApi"
-import { useSession } from "../lib/session"
+import { useAuth, useManagerSession } from "../lib/session"
 import { useToast } from "../lib/toast"
 
+type ProfileErrors = { name?: string; username?: string; email?: string }
 type PasswordErrors = { current?: string; next?: string; confirm?: string }
 
 export default function AccountPage() {
   const navigate = useNavigate()
-  const { manager, store } = useSession()
+  const { manager, store } = useManagerSession()
+  const { applySession, signOut } = useAuth()
   const { showToast } = useToast()
 
-  // Seeded from the signed-in account; editable until the auth backend exists
   const [fullName, setFullName] = useState(manager.name)
   const [username, setUsername] = useState(manager.username)
   const [email, setEmail] = useState(manager.email)
   /* Optional: with none attached the avatar falls back to the account's initials */
   const [photo, setPhoto] = useState<File | null>(null)
+  const [removePhoto, setRemovePhoto] = useState(false)
+  const [profileErrors, setProfileErrors] = useState<ProfileErrors>({})
   const [profileSaving, setProfileSaving] = useState(false)
 
   const [currentPassword, setCurrentPassword] = useState("")
@@ -38,10 +41,25 @@ export default function AccountPage() {
   async function handleProfileSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     setProfileSaving(true)
-    // TODO: send to the real API once the backend exists
-    await new Promise((r) => setTimeout(r, 600))
-    setProfileSaving(false)
-    showToast("Profile saved.")
+    setProfileErrors({})
+    try {
+      const session = await api.updateProfile({
+        name: fullName,
+        username,
+        email,
+        ...(photo ? { photo } : {}),
+        ...(removePhoto && !photo ? { removePhoto: true } : {}),
+      })
+      applySession(session)
+      setPhoto(null)
+      setRemovePhoto(false)
+      showToast("Profile saved.")
+    } catch (err) {
+      if (err instanceof ApiError && err.fields) setProfileErrors(err.fields)
+      else showToast(err instanceof ApiError ? err.message : "That did not save. Try again.")
+    } finally {
+      setProfileSaving(false)
+    }
   }
 
   async function handlePasswordSubmit(e: SubmitEvent<HTMLFormElement>) {
@@ -55,13 +73,24 @@ export default function AccountPage() {
     if (Object.keys(next).length > 0) return
 
     setPasswordSaving(true)
-    // TODO: send to the real API once the backend exists
-    await new Promise((r) => setTimeout(r, 600))
-    setCurrentPassword("")
-    setNewPassword("")
-    setConfirmPassword("")
-    setPasswordSaving(false)
-    showToast("Password updated.")
+    try {
+      await api.changePassword(currentPassword, newPassword)
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmPassword("")
+      showToast("Password updated.")
+    } catch (err) {
+      if (err instanceof ApiError && err.fields) setPasswordErrors(err.fields)
+      else showToast(err instanceof ApiError ? err.message : "That did not save. Try again.")
+    } finally {
+      setPasswordSaving(false)
+    }
+  }
+
+  async function handleSignOut() {
+    await signOut()
+    navigate("/login", { replace: true })
+    showToast("Signed out.")
   }
 
   const submitClass =
@@ -88,21 +117,25 @@ export default function AccountPage() {
             id="account-photo"
             name={fullName}
             file={photo}
+            existingUrl={removePhoto ? null : manager.photoUrl}
             onChange={setPhoto}
+            onRemoveExisting={() => setRemovePhoto(true)}
             hint="Optional — your initials stand in without one."
           />
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="account-name" label="Full name">
+            <FormField id="account-name" label="Full name" error={profileErrors.name}>
               <input
                 id="account-name"
                 type="text"
                 autoComplete="name"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className={`${inputBase} ${inputOk}`}
+                aria-invalid={Boolean(profileErrors.name)}
+                aria-describedby={profileErrors.name ? "account-name-error" : undefined}
+                className={`${inputBase} ${profileErrors.name ? inputBad : inputOk}`}
               />
             </FormField>
-            <FormField id="account-username" label="Username">
+            <FormField id="account-username" label="Username" error={profileErrors.username}>
               <input
                 id="account-username"
                 type="text"
@@ -112,11 +145,13 @@ export default function AccountPage() {
                 spellCheck={false}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className={`${inputBase} ${inputOk}`}
+                aria-invalid={Boolean(profileErrors.username)}
+                aria-describedby={profileErrors.username ? "account-username-error" : undefined}
+                className={`${inputBase} ${profileErrors.username ? inputBad : inputOk}`}
               />
             </FormField>
           </div>
-          <FormField id="account-email" label="Gmail">
+          <FormField id="account-email" label="Gmail" error={profileErrors.email}>
             <input
               id="account-email"
               type="email"
@@ -126,7 +161,9 @@ export default function AccountPage() {
               spellCheck={false}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={`${inputBase} ${inputOk}`}
+              aria-invalid={Boolean(profileErrors.email)}
+              aria-describedby={profileErrors.email ? "account-email-error" : undefined}
+              className={`${inputBase} ${profileErrors.email ? inputBad : inputOk}`}
             />
           </FormField>
           <FormField
@@ -219,10 +256,7 @@ export default function AccountPage() {
         </p>
         <button
           type="button"
-          onClick={() => {
-            navigate("/login")
-            showToast("Signed out.")
-          }}
+          onClick={() => void handleSignOut()}
           className="mt-4 flex h-11 items-center justify-center gap-2 rounded-lg border border-line-strong px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
         >
           <SignOutIcon size={17} aria-hidden="true" />

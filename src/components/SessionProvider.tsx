@@ -1,79 +1,115 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { ReactNode } from "react"
-import { api } from "../lib/api"
-import type { Manager, Owner, Store } from "../lib/api"
-import { SessionContext } from "../lib/session"
+import { api, onUnauthorized } from "../lib/api"
+import type { Session, Store } from "../lib/api"
+import { AuthContext } from "../lib/session"
+import type { AuthStatus } from "../lib/session"
 
-type Loaded = { manager: Manager; owner: Owner; stores: Store[] }
+type State =
+  | { status: "loading" | "signed-out" }
+  | { status: "manager" | "owner"; session: Session; stores: Store[] }
 
 /*
- * Resolves the session and the branch list once, before any page renders.
+ * Resolves who is signed in once, before any route renders, and owns every
+ * transition after that: sign-in, sign-out, and a session expiring under us.
  *
- * Doing it here rather than in each page is what let the identity move behind
- * the API without every consumer growing a loading branch: below this point
- * `manager` and `store` are always present, exactly as they were when they came
- * from a module-level constant.
+ * A session is one identity or none — `GET /session` answering with neither is
+ * the normal signed-out case, not a failure, and the route guards turn it into
+ * a redirect to /login. Only a transport failure blocks the boot, and that
+ * renders a retry rather than a dead end: the branch's connection dropping for
+ * a moment must not strand the manager on an error screen.
  */
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [loaded, setLoaded] = useState<Loaded | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [state, setState] = useState<State>({ status: "loading" })
+  const [bootError, setBootError] = useState<string | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
 
-  const load = useCallback(async () => {
-    const [session, stores] = await Promise.all([api.session(), api.stores()])
-    const manager = session.manager
-    const owner = session.owner
-    if (!manager || !owner || stores.length === 0) {
-      throw new Error("The account could not be loaded.")
-    }
-    setLoaded({ manager, owner, stores })
+  const adopt = useCallback(async (session: Session): Promise<State> => {
+    if (!session.manager && !session.owner) return { status: "signed-out" }
+    const stores = await api.stores()
+    return { status: session.manager ? "manager" : "owner", session, stores }
   }, [])
 
   useEffect(() => {
     let live = true
-    load().catch((err: unknown) => {
-      if (!live) return
-      setError(err instanceof Error ? err.message : "The account could not be loaded.")
-    })
+    setBootError(null)
+    api
+      .session()
+      .then(adopt)
+      .then((next) => {
+        if (live) setState(next)
+      })
+      .catch((err: unknown) => {
+        if (!live) return
+        setBootError(err instanceof Error ? err.message : "The app could not load. Try again.")
+      })
     return () => {
       live = false
     }
-  }, [load])
+  }, [adopt, retryNonce])
 
-  const signInAs = useCallback(
-    (identifier: string) => {
-      // The password is validated by the form; the backend re-checks it
-      void api
-        .signIn(identifier, "")
-        .then(() => load())
-        .catch(() => setError("Sign-in failed. Try again."))
-    },
-    [load],
-  )
-
-  const signOut = useCallback(() => {
-    void api.signOut()
+  /* A 401 from any request means the cookie died under us — drop to signed-out
+     and let the guards walk the user back to the sign-in form. Sign-in's own
+     401 (wrong password) also fires this, harmlessly: the state it resets to
+     is the state a failed sign-in is already in. */
+  useEffect(() => {
+    return onUnauthorized(() => {
+      setState((prev) => (prev.status === "manager" || prev.status === "owner" ? { status: "signed-out" } : prev))
+    })
   }, [])
 
-  const value = useMemo(
-    () =>
-      loaded
-        ? {
-            manager: loaded.manager,
-            store:
-              loaded.stores.find((s) => s.id === loaded.manager.storeId) ?? loaded.stores[0],
-            owner: loaded.owner,
-            stores: loaded.stores,
-            signInAs,
-            signOut,
-          }
-        : null,
-    [loaded, signInAs, signOut],
+  const signIn = useCallback(
+    async (identifier: string, password: string, remember: boolean) => {
+      const session = await api.signIn(identifier, password, remember)
+      setState(await adopt(session))
+      return session
+    },
+    [adopt],
   )
 
-  if (error) {
+  const signOut = useCallback(async () => {
+    try {
+      await api.signOut()
+    } finally {
+      /* The UI signs out even if the DELETE was lost to the network — showing
+         a signed-in shell after the user asked to leave is the worse failure */
+      setState({ status: "signed-out" })
+    }
+  }, [])
+
+  const applySession = useCallback((session: Session) => {
+    setState((prev) => {
+      if (prev.status !== "manager" && prev.status !== "owner") return prev
+      if (!session.manager && !session.owner) return { status: "signed-out" }
+      return { ...prev, status: session.manager ? "manager" : "owner", session }
+    })
+  }, [])
+
+  const value = useMemo(() => {
+    const status: AuthStatus = state.status
+    const session = state.status === "manager" || state.status === "owner" ? state.session : null
+    return {
+      status,
+      manager: session?.manager ?? null,
+      owner: session?.owner ?? null,
+      stores: state.status === "manager" || state.status === "owner" ? state.stores : [],
+      signIn,
+      signOut,
+      applySession,
+    }
+  }, [state, signIn, signOut, applySession])
+
+  if (bootError) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center px-6">
-        <p className="max-w-sm text-center text-[14px] leading-[1.6] text-mute">{error}</p>
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 px-6">
+        <p className="max-w-sm text-center text-[14px] leading-[1.6] text-mute">{bootError}</p>
+        <button
+          type="button"
+          onClick={() => setRetryNonce((n) => n + 1)}
+          className="flex h-11 items-center justify-center rounded-lg border border-line-strong px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+        >
+          Try again
+        </button>
       </div>
     )
   }
@@ -81,7 +117,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   /* Held blank rather than shown as a spinner: this resolves in one round trip
      and a flash of loading chrome on every cold start reads worse than a beat
      of the page background. */
-  if (!value) return <div className="min-h-[100dvh]" aria-busy="true" />
+  if (state.status === "loading") return <div className="min-h-[100dvh]" aria-busy="true" />
 
-  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

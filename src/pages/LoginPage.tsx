@@ -1,10 +1,12 @@
 import { useRef, useState } from "react"
 import type { SubmitEvent } from "react"
-import { useNavigate } from "react-router-dom"
+import { Navigate, useNavigate } from "react-router-dom"
 import gsap from "gsap"
 import { useGSAP } from "@gsap/react"
 import { RISE, STAGGER, prefersReducedMotion } from "../lib/motion"
-import { useSession } from "../lib/session"
+import { ApiError, api } from "../lib/api"
+import { useAuth } from "../lib/session"
+import { useToast } from "../lib/toast"
 import {
   BankIcon,
   ChartLineUpIcon,
@@ -15,7 +17,7 @@ import {
 } from "@phosphor-icons/react"
 import logo from "../assets/twz-logo-light.png"
 
-type FieldErrors = { identifier?: string; password?: string }
+type FieldErrors = { identifier?: string; password?: string; form?: string }
 
 const SCOPE_ROWS = [
   { label: "Daily sales from Loyverse POS", icon: ChartLineUpIcon },
@@ -25,7 +27,8 @@ const SCOPE_ROWS = [
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const { signInAs } = useSession()
+  const auth = useAuth()
+  const { showToast } = useToast()
   const [identifier, setIdentifier] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -69,13 +72,39 @@ export default function LoginPage() {
     if (Object.keys(next).length > 0) return
 
     setSubmitting(true)
-    // TODO: wire to the real auth API once the backend exists
-    await new Promise((r) => setTimeout(r, 900))
-    setSubmitting(false)
-    // Mock identity: resolve the account to its branch before entering the app
-    signInAs(identifier)
-    navigate("/")
+    try {
+      const session = await auth.signIn(identifier.trim(), password, remember)
+      // Which side an account lands on is the session's answer, not a link's
+      navigate(session.owner ? "/admin" : "/", { replace: true })
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setErrors({
+          identifier: err.fields?.identifier,
+          password: err.fields?.password,
+          form: err.fields ? undefined : err.message,
+        })
+      } else {
+        setErrors({ form: "Sign-in failed. Try again." })
+      }
+      setSubmitting(false)
+    }
   }
+
+  function handleForgotPassword() {
+    const id = identifier.trim()
+    if (!id) {
+      setErrors({ identifier: "Enter your username or Gmail first, then tap this again." })
+      return
+    }
+    void api
+      .requestPasswordReset(id)
+      .then(() => showToast("If that account exists, a reset link is on its way."))
+      .catch(() => showToast("That did not go through. Try again."))
+  }
+
+  /* Already signed in — there is nothing to do here but leave */
+  if (auth.status === "manager") return <Navigate to="/" replace />
+  if (auth.status === "owner") return <Navigate to="/admin" replace />
 
   /* 16px on touch widths: WebKit zooms into focused inputs below 16px */
   const inputBase =
@@ -244,14 +273,21 @@ export default function LoginPage() {
                 </label>
                 <button
                   type="button"
-                  onClick={() => {
-                    // TODO: password reset flow once the backend exists
-                  }}
+                  onClick={handleForgotPassword}
                   className="-my-2 py-2 text-[13.5px] font-medium text-brand-deep underline-offset-4 transition-opacity duration-200 ease-quiet hover:underline hover:opacity-80"
                 >
                   Forgot password?
                 </button>
               </div>
+
+              {errors.form && (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-claret/40 bg-claret/[0.04] px-3.5 py-2.5 text-[13px] leading-[1.5] text-claret"
+                >
+                  {errors.form}
+                </p>
+              )}
 
               <button
                 type="submit"

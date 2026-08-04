@@ -12,9 +12,17 @@
  * held in module-level maps so it behaves like a server for a session — a
  * logged expense stays logged while you navigate away and back.
  *
+ * It behaves like the backend it stands in for: one identity per session,
+ * writes validated and rejected with the same ApiError shape the HTTP adapter
+ * throws, latency on every call. The one concession to development comfort is
+ * the boot state — you start signed in as the first manager so a reload does
+ * not demand credentials every time. Sign out to exercise the login flow;
+ * any password at least 6 characters long is accepted for a known account.
+ *
  * Selected by VITE_DATA_SOURCE=sample; see src/lib/api/index.ts.
  */
 import { addDays, dayKey, fromDayKey, startOfDay } from "../dateRange"
+import { ApiError } from "./client"
 import type { DayRange, Session, TwzApi } from "./contracts"
 import type {
   DailySales,
@@ -35,6 +43,15 @@ import type {
 const LATENCY = 120
 const settle = <T,>(value: T): Promise<T> =>
   new Promise((resolve) => setTimeout(() => resolve(value), LATENCY))
+const fail = (status: number, message: string, fields?: Record<string, string>): Promise<never> =>
+  new Promise((_, reject) => setTimeout(() => reject(new ApiError(status, message, fields)), LATENCY))
+
+/* Stands in for a stored photo, so receipt tiles render something honest */
+const SAMPLE_PHOTO =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400"><rect width="320" height="400" fill="#f2f1ec"/><rect x="60" y="48" width="200" height="14" rx="3" fill="#d9d7ce"/><rect x="84" y="80" width="152" height="10" rx="3" fill="#e2e0d8"/><rect x="48" y="128" width="224" height="8" rx="2" fill="#e2e0d8"/><rect x="48" y="152" width="224" height="8" rx="2" fill="#e2e0d8"/><rect x="48" y="176" width="168" height="8" rx="2" fill="#e2e0d8"/><rect x="48" y="224" width="224" height="10" rx="2" fill="#d9d7ce"/><text x="160" y="330" text-anchor="middle" font-family="monospace" font-size="20" fill="#a8a69e">SAMPLE</text></svg>',
+  )
 
 /* ---- fixtures ---- */
 
@@ -45,11 +62,12 @@ const STORES: Store[] = [
   { id: "lapaz", name: "La Paz" },
 ]
 
-const OWNER: Owner = {
+let owner: Owner = {
   id: "owner",
   name: "Two Wheels Zone",
   username: "twz.owner",
   email: "owner@gmail.com",
+  photoUrl: null,
 }
 
 const SEED_MANAGERS: Manager[] = [
@@ -60,6 +78,7 @@ const SEED_MANAGERS: Manager[] = [
     email: "marvin.deocampo@gmail.com",
     storeId: "arevalo",
     active: true,
+    photoUrl: null,
   },
   {
     id: "m-molo",
@@ -68,6 +87,7 @@ const SEED_MANAGERS: Manager[] = [
     email: "joel.sarabia@gmail.com",
     storeId: "molo",
     active: true,
+    photoUrl: null,
   },
   {
     id: "m-jaro",
@@ -76,6 +96,7 @@ const SEED_MANAGERS: Manager[] = [
     email: "rhea.villanueva@gmail.com",
     storeId: "jaro",
     active: true,
+    photoUrl: null,
   },
 ]
 
@@ -92,6 +113,7 @@ const SEED_CATEGORIES: ExpenseCategoryConfig[] = [
 
 let managers = [...SEED_MANAGERS]
 let categories = [...SEED_CATEGORIES]
+/* Booted signed-in for development comfort; sign out to see the login flow */
 let signedIn: Session = { manager: managers[0], owner: null }
 let rules = { batchWindowDays: 3 }
 
@@ -102,6 +124,9 @@ const editedExpenses = new Map<string, Partial<ExpenseItem>>()
 const recordedDeposits = new Map<string, Deposit[]>()
 /** Days closed by a deposit recorded this session */
 const clearedDays = new Set<string>()
+/** Slip fingerprints of deposits recorded this session — the server-side half
+    of the duplicate check the backend will own */
+const slipShas = new Map<string, string>()
 
 /* ---- deterministic generators ---- */
 
@@ -140,6 +165,13 @@ function isToday(day: DayKey): boolean {
   return day === dayKey(new Date())
 }
 
+/** ISO instant for a wall-clock time on a sample day */
+function instantOf(day: DayKey, hour: number, minute: number): string {
+  const d = fromDayKey(day)
+  d.setHours(hour, minute, 0, 0)
+  return d.toISOString()
+}
+
 function hourlyFor(storeId: string, day: DayKey): HourPoint[] {
   const date = fromDayKey(day)
   const rand = mulberry32(hashSeed(`${storeId}:${day}`))
@@ -170,16 +202,10 @@ const OTHER_NOTES = [
 
 /* Utility bills arrive once a month on a fixed day, per branch */
 const MONTHLY_BILLS = [
-  { id: "electric", day: 5, category: "Electric bill", min: 7_800, spread: 5_200, time: "9:40 AM" },
-  { id: "water", day: 10, category: "Water bill", min: 780, spread: 620, time: "10:15 AM" },
-  { id: "wifi", day: 15, category: "Wifi bill", min: 1_699, spread: 800, time: "2:20 PM" },
+  { id: "electric", day: 5, category: "Electric bill", min: 7_800, spread: 5_200, hour: 9, minute: 40 },
+  { id: "water", day: 10, category: "Water bill", min: 780, spread: 620, hour: 10, minute: 15 },
+  { id: "wifi", day: 15, category: "Wifi bill", min: 1_699, spread: 800, hour: 14, minute: 20 },
 ]
-
-function minutesOfDay(time: string): number {
-  const m = /^(\d+):(\d+)\s*(AM|PM)$/i.exec(time)
-  if (!m) return 0
-  return ((Number(m[1]) % 12) + (/pm/i.test(m[3]) ? 12 : 0)) * 60 + Number(m[2])
-}
 
 /* This many days back the branch never logged its spend — the "manager forgot"
    case, so the Expenses page has a real gap to flag */
@@ -210,7 +236,7 @@ function generatedExpenses(storeId: string, day: DayKey): ExpenseItem[] {
   const key = `${storeId}-${day}`
   const date = fromDayKey(day)
   const items: ExpenseItem[] = []
-  const base = { storeId, day, receiptCount: 0 }
+  const base = { storeId, day, receiptUrls: [] as string[] }
 
   if (spendLogged(storeId, day)) {
     items.push(
@@ -220,7 +246,7 @@ function generatedExpenses(storeId: string, day: DayKey): ExpenseItem[] {
         category: "Meals",
         note: "Staff lunch",
         amount: 220 + Math.round(rand() * 180),
-        time: `11:${String(30 + Math.round(rand() * 25)).padStart(2, "0")} AM`,
+        at: instantOf(day, 11, 30 + Math.round(rand() * 25)),
       },
       {
         ...base,
@@ -228,7 +254,7 @@ function generatedExpenses(storeId: string, day: DayKey): ExpenseItem[] {
         category: "Merienda",
         note: "Afternoon merienda",
         amount: 120 + Math.round(rand() * 140),
-        time: `3:${String(10 + Math.round(rand() * 40)).padStart(2, "0")} PM`,
+        at: instantOf(day, 15, 10 + Math.round(rand() * 40)),
       },
     )
     if (rand() > 0.72) {
@@ -238,8 +264,8 @@ function generatedExpenses(storeId: string, day: DayKey): ExpenseItem[] {
         category: "Other",
         note: OTHER_NOTES[Math.floor(rand() * OTHER_NOTES.length)],
         amount: 250 + Math.round(rand() * 1400),
-        time: `1:${String(10 + Math.round(rand() * 40)).padStart(2, "0")} PM`,
-        receiptCount: 1,
+        at: instantOf(day, 13, 10 + Math.round(rand() * 40)),
+        receiptUrls: [SAMPLE_PHOTO],
       })
     }
   }
@@ -257,8 +283,8 @@ function generatedExpenses(storeId: string, day: DayKey): ExpenseItem[] {
       category: bill.category,
       note: `${period} billing period`,
       amount: bill.min + Math.round(billRand() * bill.spread),
-      time: bill.time,
-      receiptCount: 1,
+      at: instantOf(day, bill.hour, bill.minute),
+      receiptUrls: [SAMPLE_PHOTO],
     })
   }
   return items
@@ -270,7 +296,21 @@ function expensesFor(storeId: string, day: DayKey): ExpenseItem[] {
   return [...generated, ...added]
     .filter((i) => !removedExpenses.has(i.id))
     .map((i) => ({ ...i, ...(editedExpenses.get(i.id) ?? {}) }))
-    .sort((a, b) => minutesOfDay(a.time) - minutesOfDay(b.time))
+    .sort((a, b) => a.at.localeCompare(b.at))
+}
+
+/** One expense by id, from wherever it lives — needed to answer an update
+    with the complete row the way a real backend would */
+function expenseById(id: string): ExpenseItem | null {
+  for (const list of addedExpenses.values()) {
+    const hit = list.find((i) => i.id === id)
+    if (hit) return { ...hit, ...(editedExpenses.get(id) ?? {}) }
+  }
+  // Generated ids carry their own coordinates: `${storeId}-${YYYY-MM-DD}-...`
+  const m = /^([a-z]+)-(\d{4}-\d{2}-\d{2})-/.exec(id)
+  if (!m) return null
+  const hit = generatedExpenses(m[1], m[2]).find((i) => i.id === id)
+  return hit ? { ...hit, ...(editedExpenses.get(id) ?? {}) } : null
 }
 
 function expenseTotal(storeId: string, day: DayKey): number {
@@ -291,17 +331,19 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
   const diff = daysBack(day)
   const base = { storeId, day, gross, expenses, expected }
 
-  if (diff <= 0) return { ...base, deposited: null, reference: null, status: "open" }
+  if (diff <= 0)
+    return { ...base, deposited: null, reference: null, slipUrl: null, status: "open" }
 
   if (diff <= DEPOSIT_TIMELINE.pendingThrough) {
     if (!clearedDays.has(`${storeId}:${day}`))
-      return { ...base, deposited: null, reference: null, status: "pending" }
-    // Closed by a deposit recorded this session
+      return { ...base, deposited: null, reference: null, slipUrl: null, status: "pending" }
+    // Closed by a deposit recorded this session, whose slip photo we hold
     const covering = (recordedDeposits.get(storeId) ?? []).find((d) => d.covers.includes(day))
     return {
       ...base,
       deposited: expected,
       reference: covering?.reference ?? referenceFor(storeId, day),
+      slipUrl: covering?.slipUrl ?? null,
       status: covering && !covering.matched ? "discrepancy" : "matched",
     }
   }
@@ -311,6 +353,7 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
       ...base,
       deposited: expected - DEPOSIT_TIMELINE.shortfall,
       reference: referenceFor(storeId, day),
+      slipUrl: SAMPLE_PHOTO,
       status: "discrepancy",
     }
   }
@@ -322,6 +365,7 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
       ...base,
       deposited: expected,
       reference: referenceFor(storeId, `pair:${newer}`),
+      slipUrl: SAMPLE_PHOTO,
       status: "matched",
     }
   }
@@ -330,9 +374,15 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
   const reference = referenceFor(storeId, day)
   if (rand() > 0.87) {
     const shortfall = 100 + Math.round(rand() * 400)
-    return { ...base, deposited: expected - shortfall, reference, status: "discrepancy" as DayStatus }
+    return {
+      ...base,
+      deposited: expected - shortfall,
+      reference,
+      slipUrl: SAMPLE_PHOTO,
+      status: "discrepancy" as DayStatus,
+    }
   }
-  return { ...base, deposited: expected, reference, status: "matched" }
+  return { ...base, deposited: expected, reference, slipUrl: SAMPLE_PHOTO, status: "matched" }
 }
 
 function eachDay(range: DayRange): DayKey[] {
@@ -382,21 +432,29 @@ function signInLog(accountId: string): SignInEvent[] {
 /* ---- the adapter ---- */
 
 export const sampleApi: TwzApi = {
-  /* Both identities come back because there is no auth yet and the owner area
-     is reachable by URL. A real backend returns only who is actually signed in. */
-  session: () => settle({ manager: signedIn.manager ?? managers[0], owner: OWNER }),
+  session: () => settle({ ...signedIn }),
 
-  signIn: (identifier) => {
+  signIn: (identifier, password) => {
     const id = identifier.trim().toLowerCase()
-    if (id === OWNER.username || id === OWNER.email) {
-      signedIn = { manager: null, owner: OWNER }
-    } else {
-      const found =
-        managers.find((m) => m.username.toLowerCase() === id || m.email.toLowerCase() === id) ??
-        managers[0]
-      signedIn = { manager: found, owner: null }
+    if (password.length < 6) {
+      return fail(401, "That username and password do not match.", {
+        password: "That password is not right.",
+      })
     }
-    return settle(signedIn)
+    if (id === owner.username || id === owner.email.toLowerCase()) {
+      signedIn = { manager: null, owner }
+      return settle({ ...signedIn })
+    }
+    const found = managers.find(
+      (m) => m.username.toLowerCase() === id || m.email.toLowerCase() === id,
+    )
+    if (!found) {
+      return fail(401, "That username and password do not match.", {
+        identifier: "No account matches this.",
+      })
+    }
+    signedIn = { manager: found, owner: null }
+    return settle({ ...signedIn })
   },
 
   signOut: () => {
@@ -404,12 +462,64 @@ export const sampleApi: TwzApi = {
     return settle(undefined)
   },
 
+  requestPasswordReset: () => settle(undefined),
+
   signIns: (accountId) => settle(signInLog(accountId)),
+
+  updateProfile: (input) => {
+    const name = input.name.trim()
+    const username = input.username.trim()
+    const email = input.email.trim()
+    const fields: Record<string, string> = {}
+    if (!name) fields.name = "Enter the full name."
+    if (!username) fields.username = "Enter a username."
+    if (!/^[^\s@]+@gmail\.com$/i.test(email))
+      fields.email = "That doesn't look like a valid Gmail address."
+    if (Object.keys(fields).length > 0) return fail(422, "Check the highlighted fields.", fields)
+
+    const photoUrl = input.photo
+      ? URL.createObjectURL(input.photo)
+      : input.removePhoto
+        ? null
+        : (signedIn.manager?.photoUrl ?? signedIn.owner?.photoUrl ?? null)
+
+    if (signedIn.manager) {
+      const updated = { ...signedIn.manager, name, username, email, photoUrl }
+      managers = managers.map((m) => (m.id === updated.id ? updated : m))
+      signedIn = { manager: updated, owner: null }
+    } else if (signedIn.owner) {
+      owner = { ...owner, name, username, email, photoUrl }
+      signedIn = { manager: null, owner }
+    } else {
+      return fail(401, "Your session has expired. Sign in again.")
+    }
+    return settle({ ...signedIn })
+  },
+
+  changePassword: (current, next) => {
+    if (!current) {
+      return fail(422, "Check the highlighted fields.", {
+        current: "Enter your current password.",
+      })
+    }
+    if (next.length < 6) {
+      return fail(422, "Check the highlighted fields.", {
+        next: "Password must be at least 6 characters.",
+      })
+    }
+    return settle(undefined)
+  },
 
   stores: () => settle(STORES),
   managers: () => settle([...managers]),
 
   issueManager: (input) => {
+    const email = input.email.trim().toLowerCase()
+    if (managers.some((m) => m.email.toLowerCase() === email)) {
+      return fail(422, "Check the highlighted fields.", {
+        email: "That Gmail already has an account.",
+      })
+    }
     const username = input.name.trim().toLowerCase().replace(/\s+/g, ".")
     const created: Manager = {
       id: `m-${Date.now().toString(36)}`,
@@ -418,6 +528,7 @@ export const sampleApi: TwzApi = {
       email: input.email.trim(),
       storeId: input.storeId,
       active: true,
+      photoUrl: null,
     }
     managers = [...managers, created]
     return settle(created)
@@ -470,6 +581,13 @@ export const sampleApi: TwzApi = {
     settle(eachDay(range).flatMap((day) => expensesFor(storeId, day))),
 
   addExpenses: (items) => {
+    for (const item of items) {
+      if (!(item.amount > 0)) return fail(422, "Every expense needs an amount above zero.")
+      if (!categories.some((c) => c.name === item.category))
+        return fail(422, `${item.category} is not a category anymore.`)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(item.day))
+        return fail(422, "That day is not a valid date.")
+    }
     const created = items.map((item, i) => ({
       id: `local-${Date.now().toString(36)}-${i}`,
       storeId: item.storeId,
@@ -477,8 +595,8 @@ export const sampleApi: TwzApi = {
       category: item.category,
       note: item.note,
       amount: item.amount,
-      time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-      receiptCount: item.receipts.length,
+      at: new Date().toISOString(),
+      receiptUrls: item.receipts.map((f) => URL.createObjectURL(f)),
     }))
     for (const item of created) {
       const key = `${item.storeId}:${item.day}`
@@ -488,15 +606,26 @@ export const sampleApi: TwzApi = {
   },
 
   updateExpense: (id, patch) => {
-    const next = {
+    const existing = expenseById(id)
+    if (!existing) return fail(404, "That expense is no longer there.")
+    if (patch.amount !== undefined && !(patch.amount > 0))
+      return fail(422, "Check the highlighted fields.", { amount: "Enter an amount above zero." })
+    const next: Partial<ExpenseItem> = {
       ...(editedExpenses.get(id) ?? {}),
       ...(patch.category !== undefined ? { category: patch.category } : {}),
       ...(patch.note !== undefined ? { note: patch.note } : {}),
       ...(patch.amount !== undefined ? { amount: patch.amount } : {}),
-      ...(patch.receipts !== undefined ? { receiptCount: patch.receipts.length } : {}),
+      ...(patch.receipts !== undefined
+        ? {
+            receiptUrls: [
+              ...patch.receipts.keep,
+              ...patch.receipts.add.map((f) => URL.createObjectURL(f)),
+            ],
+          }
+        : {}),
     }
     editedExpenses.set(id, next)
-    return settle({ id, ...next } as ExpenseItem)
+    return settle({ ...existing, ...next })
   },
 
   deleteExpense: (id) => {
@@ -506,6 +635,10 @@ export const sampleApi: TwzApi = {
 
   expenseCategories: () => settle([...categories]),
   saveExpenseCategories: (next) => {
+    const names = next.map((c) => c.name.trim().toLowerCase())
+    if (names.some((n) => !n)) return fail(422, "A category cannot be blank.")
+    if (new Set(names).size !== names.length)
+      return fail(422, "Two categories cannot share a name.")
     categories = [...next]
     return settle([...categories])
   },
@@ -530,7 +663,26 @@ export const sampleApi: TwzApi = {
   },
 
   recordDeposit: (input) => {
-    const expected = input.covers.reduce((sum, day) => sum + auditFor(input.storeId, day).expected, 0)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.day))
+      return fail(422, "Check the highlighted fields.", { day: "Enter the deposit date." })
+    if (!(input.amount > 0))
+      return fail(422, "Check the highlighted fields.", { amount: "Enter an amount above zero." })
+    if (!input.reference.trim())
+      return fail(422, "Check the highlighted fields.", { reference: "Enter the reference number." })
+    if (input.covers.length === 0)
+      return fail(422, "Select at least one day this deposit covers.")
+    const duplicate =
+      input.slipSha &&
+      [...recordedDeposits.values()].flat().some((d) => slipShas.get(d.id) === input.slipSha)
+    if (duplicate) {
+      return fail(409, "This slip photo already covers a deposit.", {
+        slip: "This exact photo was already filed. Take a fresh photo of the right slip.",
+      })
+    }
+    const expected = input.covers.reduce(
+      (sum, day) => sum + auditFor(input.storeId, day).expected,
+      0,
+    )
     const deposit: Deposit = {
       id: `dep-${Date.now().toString(36)}`,
       storeId: input.storeId,
@@ -538,8 +690,10 @@ export const sampleApi: TwzApi = {
       amount: input.amount,
       reference: input.reference,
       covers: [...input.covers],
-      matched: input.amount === expected,
+      slipUrl: URL.createObjectURL(input.slip),
+      matched: Math.round(input.amount * 100) === Math.round(expected * 100),
     }
+    if (input.slipSha) slipShas.set(deposit.id, input.slipSha)
     recordedDeposits.set(input.storeId, [deposit, ...(recordedDeposits.get(input.storeId) ?? [])])
     input.covers.forEach((day) => clearedDays.add(`${input.storeId}:${day}`))
     return settle(deposit)
@@ -550,7 +704,9 @@ export const sampleApi: TwzApi = {
   reconnectPos: () => settle(undefined),
   reconciliationRules: () => settle({ ...rules }),
   saveReconciliationRules: (next) => {
-    rules = { ...next }
+    if (!Number.isInteger(next.batchWindowDays) || next.batchWindowDays < 1 || next.batchWindowDays > 14)
+      return fail(422, "The batching window must be between 1 and 14 days.")
+    rules = { batchWindowDays: next.batchWindowDays }
     return settle(undefined)
   },
 }

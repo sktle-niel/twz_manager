@@ -1,5 +1,5 @@
 import { useRef } from "react"
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom"
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import {
   ClockCounterClockwiseIcon,
   GearIcon,
@@ -11,7 +11,7 @@ import {
 import type { Icon } from "@phosphor-icons/react"
 import logo from "../assets/twz-logo-light.png"
 import { useRouteReveal } from "../lib/motion"
-import { useSession } from "../lib/session"
+import { useAuth, useOwnerSession } from "../lib/session"
 import { useToast } from "../lib/toast"
 import { GlobalSearch } from "./GlobalSearch"
 
@@ -28,11 +28,19 @@ const MOBILE_TABS = NAV.slice(0, 4)
 
 export default function AdminShell() {
   const { showToast } = useToast()
-  const { stores } = useSession()
+  const { stores } = useOwnerSession()
+  const { signOut } = useAuth()
+  const navigate = useNavigate()
   const allStoreIds = stores.map((s) => s.id)
   const mainRef = useRef<HTMLElement>(null)
   const { pathname } = useLocation()
   useRouteReveal(mainRef, pathname)
+
+  async function handleSignOut() {
+    await signOut()
+    navigate("/login", { replace: true })
+    showToast("Signed out.")
+  }
 
   return (
     <div className="min-h-[100dvh] lg:pl-60">
@@ -71,14 +79,14 @@ export default function AdminShell() {
             ))}
           </nav>
           <div className="mt-auto border-t border-line pt-3">
-            <Link
-              to="/login"
-              onClick={() => showToast("Signed out.")}
-              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium text-ink-soft transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
+            <button
+              type="button"
+              onClick={() => void handleSignOut()}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium text-ink-soft transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
             >
               <SignOutIcon size={18} aria-hidden="true" />
               <span>Sign out</span>
-            </Link>
+            </button>
           </div>
         </div>
       </aside>
