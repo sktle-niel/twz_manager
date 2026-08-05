@@ -76,6 +76,18 @@ Relative paths (`/api/files/…`) are fine; the frontend puts them straight into
 **Timeouts.** The client aborts reads after 20 s and uploads after 120 s and
 shows a retry. Long-running work should not hide behind a single request.
 
+**Rate limits.** Every endpoint is metered: **120 requests per minute**, counted
+per account once signed in and per IP before that — so a branch where three
+managers share one router never has them competing for one allowance. Over the
+line is `429` with the usual `{ message }`, which is written for the manager and
+should be shown verbatim. Two doors are tighter, both to protect something that
+costs more than a read: sign-in pauses for a minute after **five failed
+attempts** on the same identifier+IP (successes never count, and one success
+clears the slate), and asking for a password-reset link is capped at **six per
+hour per IP** because it sends mail to an address the caller names. Responses
+carry `X-RateLimit-Limit` and `X-RateLimit-Remaining` if the client ever wants to
+back off early.
+
 ## Identity
 
 ### `GET /session`
@@ -97,6 +109,27 @@ done even if this request is lost — expire abandoned sessions server-side.
 ### `POST /password-resets`
 Body `{ identifier: string }`. Sends a reset link if the account exists.
 **204 either way** — the response must not reveal whether an account exists.
+A disabled account is treated as no account: it hears the same 204 and gets no
+link, because a reset must not reopen a door the owner closed.
+
+The mailed link points at the frontend, not the API:
+`{FRONTEND_URL}/reset-password?token=…&email=…`. **That page does not exist
+yet** — building it is the remaining half of this flow.
+
+### `POST /password-resets/redeem`
+Body `{ token: string, email: string, password: string }` — the three values
+the reset page has: two from its own query string, one the user just typed.
+**204** on success.
+**422** `{ message }` with no `fields` when the link is expired, already spent,
+or does not match that address — one answer for all three, so a spent link
+cannot be told apart from a guessed one. Show `message` as a banner with a way
+back to "forgot password".
+**422** with `fields.password` when the new password is under 8 characters.
+
+The token travels in the body rather than the path so it stays out of access
+logs and browser history. It works once and expires 60 minutes after it is
+issued. Redeeming also invalidates any "remember me" cookie still held by
+another device.
 
 ### `GET /accounts/{accountId}/sign-ins`
 **200** `SignInEvent[]`, newest first, `current: true` on the session making
