@@ -9,7 +9,7 @@ import { Pagination } from "../components/Pagination"
 import { api } from "../lib/api"
 import { useApi } from "../lib/useApi"
 import { branchNotices } from "../lib/notices"
-import { useSession } from "../lib/session"
+import { useManagerSession } from "../lib/session"
 import {
   addDays,
   dayKey,
@@ -27,7 +27,7 @@ const rowGrid =
 const PAGE_SIZE = 20
 
 export default function DashboardPage() {
-  const { manager, store } = useSession()
+  const { manager, store } = useManagerSession()
   const [range, setRange] = useState<DateRange>(() => presetRange("today", startOfDay(new Date())))
   const [page, setPage] = useState(1)
   /* Frozen at mount so the status rail's relative times hold still between renders */
@@ -111,7 +111,27 @@ export default function DashboardPage() {
         className="mt-5 rounded-xl border border-line bg-surface p-5"
         data-rise
       >
-        {days.length === 0 ? (
+        {sales.error || hourly.error ? (
+          /* A failed read renders as a failure — ₱0.00 standing in for figures
+             that never arrived would read as a very bad day that never happened */
+          <div role="alert" className="py-10 text-center">
+            <p className="text-[14px] text-mute">The sales figures could not load.</p>
+            <button
+              type="button"
+              onClick={() => {
+                sales.reload()
+                hourly.reload()
+              }}
+              className="mt-3 inline-flex h-10 items-center justify-center rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+            >
+              Try again
+            </button>
+          </div>
+        ) : sales.loading ? (
+          <p className="py-10 text-center text-[14px] text-mute" aria-busy="true">
+            Loading sales…
+          </p>
+        ) : days.length === 0 ? (
           <p className="py-10 text-center text-[14px] text-mute">
             No sales data for this range yet.
           </p>
@@ -187,7 +207,18 @@ export default function DashboardPage() {
           <span className="text-right text-[12px] font-medium text-mute">Expected deposit</span>
         </div>
 
-        {listDays.length === 0 ? (
+        {sales.error ? (
+          <p role="alert" className="flex flex-wrap items-center justify-center gap-2 px-5 py-10 text-center text-[13px] text-claret">
+            These figures could not load.
+            <button
+              type="button"
+              onClick={sales.reload}
+              className="font-medium underline underline-offset-4"
+            >
+              Try again
+            </button>
+          </p>
+        ) : listDays.length === 0 ? (
           <p className="px-5 py-10 text-center text-[14px] text-mute">
             No days in this range yet.
           </p>

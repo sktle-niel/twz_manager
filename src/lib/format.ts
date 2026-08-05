@@ -1,7 +1,10 @@
+/* Whole pesos stay clean (₱46,000); centavos show when they exist (₱180.50) —
+   an amount echoed off a bank slip must never display rounded */
 export const peso = new Intl.NumberFormat("en-PH", {
   style: "currency",
   currency: "PHP",
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
 })
 
 export const compact = new Intl.NumberFormat("en-US", {
@@ -18,8 +21,10 @@ export function rowDate(d: Date): string {
 }
 
 export function hourLabel(h: number): string {
-  if (h === 12) return "12 PM"
-  return h > 12 ? `${h - 12} PM` : `${h} AM`
+  const hour = ((h % 24) + 24) % 24
+  if (hour === 0) return "12 AM"
+  if (hour === 12) return "12 PM"
+  return hour > 12 ? `${hour - 12} PM` : `${hour} AM`
 }
 
 /* First and last initial, for the avatar fallback and the manager list */

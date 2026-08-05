@@ -1,8 +1,9 @@
 /*
  * The real adapter. Every method is one request against our own backend — see
- * docs/LOYVERSE.md for what that backend owes upstream.
+ * docs/API.md for the endpoint spec and docs/LOYVERSE.md for what that backend
+ * owes upstream.
  */
-import { get, send, upload } from "./client"
+import { ApiError, get, send, upload } from "./client"
 import type { DayRange, Session, TwzApi } from "./contracts"
 import type {
   DailySales,
@@ -16,6 +17,7 @@ import type {
   Manager,
   NewDeposit,
   NewExpense,
+  ProfileInput,
   SignInEvent,
   Store,
 } from "./types"
@@ -23,10 +25,38 @@ import type {
 const range = (r: DayRange) => ({ from: r.from, to: r.to })
 
 export const httpApi: TwzApi = {
-  session: () => get<Session>("/session"),
-  signIn: (identifier, password) => send<Session>("POST", "/session", { identifier, password }),
+  session: () =>
+    get<Session>("/session").catch((err: unknown) => {
+      /* Anonymous is an answer, not a failure — a backend that 401s the
+         session probe must not brick the boot sequence */
+      if (err instanceof ApiError && err.status === 401) {
+        return { manager: null, owner: null }
+      }
+      throw err
+    }),
+  signIn: (identifier, password, remember = false) =>
+    send<Session>("POST", "/session", { identifier, password, remember }),
   signOut: () => send<void>("DELETE", "/session"),
+  requestPasswordReset: (identifier) =>
+    send<void>("POST", "/password-resets", { identifier }),
   signIns: (accountId) => get<SignInEvent[]>(`/accounts/${accountId}/sign-ins`),
+
+  updateProfile: (input: ProfileInput) =>
+    input.photo
+      ? upload<Session>(
+          "PATCH",
+          "/account",
+          { name: input.name, username: input.username, email: input.email },
+          { photo: [input.photo] },
+        )
+      : send<Session>("PATCH", "/account", {
+          name: input.name,
+          username: input.username,
+          email: input.email,
+          ...(input.removePhoto ? { removePhoto: true } : {}),
+        }),
+  changePassword: (current, next) =>
+    send<void>("PUT", "/account/password", { current, next }),
 
   stores: () => get<Store[]>("/stores"),
   managers: () => get<Manager[]>("/managers"),
@@ -40,8 +70,9 @@ export const httpApi: TwzApi = {
   expenses: (storeId, r) => get<ExpenseItem[]>("/expenses", { storeId, ...range(r) }),
   addExpenses: (items: NewExpense[]) =>
     upload<ExpenseItem[]>(
+      "POST",
       "/expenses",
-      // The files travel as parts, so only the fields go in the JSON body
+      // The files travel as parts, so only the fields go in the payload
       {
         items: items.map((item) => ({
           storeId: item.storeId,
@@ -58,9 +89,15 @@ export const httpApi: TwzApi = {
   updateExpense: (id, patch: ExpensePatch) =>
     patch.receipts
       ? upload<ExpenseItem>(
+          "PATCH",
           `/expenses/${id}`,
-          { category: patch.category, note: patch.note, amount: patch.amount },
-          { receipts: patch.receipts },
+          {
+            ...(patch.category !== undefined ? { category: patch.category } : {}),
+            ...(patch.note !== undefined ? { note: patch.note } : {}),
+            ...(patch.amount !== undefined ? { amount: patch.amount } : {}),
+            keepReceipts: patch.receipts.keep,
+          },
+          { receipts: patch.receipts.add },
         )
       : send<ExpenseItem>("PATCH", `/expenses/${id}`, patch),
   deleteExpense: (id) => send<void>("DELETE", `/expenses/${id}`),
@@ -74,6 +111,7 @@ export const httpApi: TwzApi = {
   deposits: (storeId, r) => get<Deposit[]>("/deposits", { storeId, ...range(r) }),
   recordDeposit: (input: NewDeposit) =>
     upload<Deposit>(
+      "POST",
       "/deposits",
       {
         storeId: input.storeId,
@@ -81,9 +119,9 @@ export const httpApi: TwzApi = {
         amount: input.amount,
         reference: input.reference,
         covers: input.covers,
-        slipSha: input.slipSha,
-        slipPhash: input.slipPhash,
-        discrepancyReason: input.discrepancy?.reason,
+        ...(input.slipSha ? { slipSha: input.slipSha } : {}),
+        ...(input.slipPhash ? { slipPhash: input.slipPhash } : {}),
+        ...(input.discrepancy ? { discrepancyReason: input.discrepancy.reason } : {}),
       },
       { slip: [input.slip], discrepancyProof: input.discrepancy?.proof ?? [] },
     ),

@@ -5,24 +5,27 @@ import { SignOutIcon } from "@phosphor-icons/react"
 import { FormField, inputBad, inputBase, inputOk } from "../components/ui"
 import { AvatarField } from "../components/AvatarField"
 import { SignInCard } from "../components/SignInCard"
-import { api } from "../lib/api"
+import { ApiError, api } from "../lib/api"
 import { useApi } from "../lib/useApi"
-import { useSession } from "../lib/session"
+import { useAuth, useOwnerSession } from "../lib/session"
 import { useToast } from "../lib/toast"
 
+type ProfileErrors = { name?: string; username?: string; email?: string }
 type PasswordErrors = { current?: string; next?: string; confirm?: string }
 
 export default function AdminAccountPage() {
   const navigate = useNavigate()
   const { showToast } = useToast()
-  const { owner } = useSession()
+  const { owner } = useOwnerSession()
+  const { applySession, signOut } = useAuth()
 
-  // Seeded from the signed-in owner; editable until the auth backend exists
   const [fullName, setFullName] = useState(owner.name)
   const [username, setUsername] = useState(owner.username)
   const [email, setEmail] = useState(owner.email)
   /* Optional: with none attached the avatar falls back to the account's initials */
   const [photo, setPhoto] = useState<File | null>(null)
+  const [removePhoto, setRemovePhoto] = useState(false)
+  const [profileErrors, setProfileErrors] = useState<ProfileErrors>({})
   const [profileSaving, setProfileSaving] = useState(false)
 
   const [currentPassword, setCurrentPassword] = useState("")
@@ -38,10 +41,25 @@ export default function AdminAccountPage() {
   async function handleProfileSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     setProfileSaving(true)
-    // TODO: send to the real API once the backend exists
-    await new Promise((r) => setTimeout(r, 600))
-    setProfileSaving(false)
-    showToast("Profile saved.")
+    setProfileErrors({})
+    try {
+      const session = await api.updateProfile({
+        name: fullName,
+        username,
+        email,
+        ...(photo ? { photo } : {}),
+        ...(removePhoto && !photo ? { removePhoto: true } : {}),
+      })
+      applySession(session)
+      setPhoto(null)
+      setRemovePhoto(false)
+      showToast("Profile saved.")
+    } catch (err) {
+      if (err instanceof ApiError && err.fields) setProfileErrors(err.fields)
+      else showToast(err instanceof ApiError ? err.message : "That did not save. Try again.")
+    } finally {
+      setProfileSaving(false)
+    }
   }
 
   async function handlePasswordSubmit(e: SubmitEvent<HTMLFormElement>) {
@@ -55,13 +73,24 @@ export default function AdminAccountPage() {
     if (Object.keys(next).length > 0) return
 
     setPasswordSaving(true)
-    // TODO: send to the real API once the backend exists
-    await new Promise((r) => setTimeout(r, 600))
-    setCurrentPassword("")
-    setNewPassword("")
-    setConfirmPassword("")
-    setPasswordSaving(false)
-    showToast("Password updated.")
+    try {
+      await api.changePassword(currentPassword, newPassword)
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmPassword("")
+      showToast("Password updated.")
+    } catch (err) {
+      if (err instanceof ApiError && err.fields) setPasswordErrors(err.fields)
+      else showToast(err instanceof ApiError ? err.message : "That did not save. Try again.")
+    } finally {
+      setPasswordSaving(false)
+    }
+  }
+
+  async function handleSignOut() {
+    await signOut()
+    navigate("/login", { replace: true })
+    showToast("Signed out.")
   }
 
   const submitClass =
@@ -86,21 +115,25 @@ export default function AdminAccountPage() {
             id="owner-photo"
             name={fullName}
             file={photo}
+            existingUrl={removePhoto ? null : owner.photoUrl}
             onChange={setPhoto}
+            onRemoveExisting={() => setRemovePhoto(true)}
             hint="Optional — your initials stand in without one."
           />
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="owner-name" label="Full name">
+            <FormField id="owner-name" label="Full name" error={profileErrors.name}>
               <input
                 id="owner-name"
                 type="text"
                 autoComplete="name"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className={`${inputBase} ${inputOk}`}
+                aria-invalid={Boolean(profileErrors.name)}
+                aria-describedby={profileErrors.name ? "owner-name-error" : undefined}
+                className={`${inputBase} ${profileErrors.name ? inputBad : inputOk}`}
               />
             </FormField>
-            <FormField id="owner-username" label="Username">
+            <FormField id="owner-username" label="Username" error={profileErrors.username}>
               <input
                 id="owner-username"
                 type="text"
@@ -110,11 +143,13 @@ export default function AdminAccountPage() {
                 spellCheck={false}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className={`${inputBase} ${inputOk}`}
+                aria-invalid={Boolean(profileErrors.username)}
+                aria-describedby={profileErrors.username ? "owner-username-error" : undefined}
+                className={`${inputBase} ${profileErrors.username ? inputBad : inputOk}`}
               />
             </FormField>
           </div>
-          <FormField id="owner-email" label="Gmail">
+          <FormField id="owner-email" label="Gmail" error={profileErrors.email}>
             <input
               id="owner-email"
               type="email"
@@ -124,7 +159,9 @@ export default function AdminAccountPage() {
               spellCheck={false}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={`${inputBase} ${inputOk}`}
+              aria-invalid={Boolean(profileErrors.email)}
+              aria-describedby={profileErrors.email ? "owner-email-error" : undefined}
+              className={`${inputBase} ${profileErrors.email ? inputBad : inputOk}`}
             />
           </FormField>
           <FormField id="owner-role" label="Role" hint="You have full access across every branch.">
@@ -213,10 +250,7 @@ export default function AdminAccountPage() {
         </p>
         <button
           type="button"
-          onClick={() => {
-            navigate("/login")
-            showToast("Signed out.")
-          }}
+          onClick={() => void handleSignOut()}
           className="mt-4 flex h-11 items-center justify-center gap-2 rounded-lg border border-line-strong px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
         >
           <SignOutIcon size={17} aria-hidden="true" />

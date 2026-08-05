@@ -9,41 +9,39 @@ import {
 import type { Icon } from "@phosphor-icons/react"
 import type { ExpenseCategory } from "./api"
 
-export const CATEGORIES: ExpenseCategory[] = [
-  "Meals",
-  "Merienda",
-  "Water bill",
-  "Electric bill",
-  "Wifi bill",
-  "Other",
-]
+/*
+ * Category names are server data — the owner renames, adds, and removes them
+ * in Settings, so nothing here is a list of what exists. What the frontend
+ * keeps is cosmetic: a recognisable icon and a helpful placeholder for the
+ * names it knows, and a sane fallback for any name it has never seen. A brand
+ * new category must render, not crash.
+ */
 
-export const CATEGORY_ICON: Record<ExpenseCategory, Icon> = {
-  Meals: BowlFoodIcon,
-  Merienda: CoffeeIcon,
-  "Water bill": DropIcon,
-  "Electric bill": LightningIcon,
-  "Wifi bill": WifiHighIcon,
-  Other: PackageIcon,
+const KNOWN_ICON: Record<string, Icon> = {
+  meals: BowlFoodIcon,
+  merienda: CoffeeIcon,
+  "water bill": DropIcon,
+  "electric bill": LightningIcon,
+  "wifi bill": WifiHighIcon,
 }
 
-export const NOTE_PLACEHOLDER: Record<ExpenseCategory, string> = {
-  Meals: "e.g. Staff lunch",
-  Merienda: "e.g. Afternoon merienda",
-  "Water bill": "e.g. June billing period",
-  "Electric bill": "e.g. June billing period, meter reading",
-  "Wifi bill": "e.g. June billing period, account number",
-  Other: "e.g. Tricycle fare, parts pickup",
+export function categoryIcon(category: ExpenseCategory): Icon {
+  return KNOWN_ICON[category.trim().toLowerCase()] ?? PackageIcon
 }
 
-export const DEFAULT_NOTE: Record<ExpenseCategory, string> = {
-  Meals: "Staff meal",
-  Merienda: "Afternoon merienda",
-  "Water bill": "Water bill",
-  "Electric bill": "Electric bill",
-  "Wifi bill": "Wifi bill",
-  Other: "Other expense",
+const KNOWN_PLACEHOLDER: Record<string, string> = {
+  meals: "e.g. Staff lunch",
+  merienda: "e.g. Afternoon merienda",
+  "water bill": "e.g. June billing period",
+  "electric bill": "e.g. June billing period, meter reading",
+  "wifi bill": "e.g. June billing period, account number",
 }
 
-/* Company-covered staff spend: logged without a receipt, unlike every other category */
-export const RECEIPT_OPTIONAL: ExpenseCategory[] = ["Meals", "Merienda"]
+export function notePlaceholder(category: ExpenseCategory): string {
+  return KNOWN_PLACEHOLDER[category.trim().toLowerCase()] ?? "e.g. What this was for"
+}
+
+/** Stands in when the note is left blank, so a row never reads as empty */
+export function defaultNote(category: ExpenseCategory): string {
+  return category.trim() || "Expense"
+}

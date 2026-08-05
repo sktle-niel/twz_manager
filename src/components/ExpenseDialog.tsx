@@ -3,52 +3,47 @@ import type { SubmitEvent } from "react"
 import { createPortal } from "react-dom"
 import { XIcon } from "@phosphor-icons/react"
 import { useSheetEnter } from "../lib/motion"
-import type { ExpenseCategory, ExpenseItem } from "../lib/api"
-import {
-  CATEGORIES,
-  DEFAULT_NOTE,
-  NOTE_PLACEHOLDER,
-  RECEIPT_OPTIONAL,
-} from "../lib/expenseCategories"
+import type { ExpenseCategoryConfig, ExpenseItem, ExpensePatch } from "../lib/api"
+import { defaultNote, notePlaceholder } from "../lib/expenseCategories"
 import { FormField, inputBad, inputBase, inputOk } from "./ui"
 import { Select } from "./Select"
 import { ReceiptUploader } from "./ReceiptUploader"
-import { onFileEntries } from "../lib/receipts"
+import { storedEntries } from "../lib/receipts"
 import type { ReceiptEntry } from "../lib/receipts"
 
 type FieldErrors = { amount?: string; receipt?: string }
-
-/* Stored receipts arrive as a count, not as files — there is no way to preview
-   one the server holds until it serves them, so they show as placeholders */
-function entriesFor(item: ExpenseItem): ReceiptEntry[] {
-  return onFileEntries(item.receiptCount)
-}
 
 /*
  * Corrects one already-logged expense. Mount with a `key` of the item's id so
  * the fields re-seed each time a different row is opened.
  *
- * Receipts already on file show as tiles that can be removed or added to (up to
- * five), but a required category can never be saved with none — the receipt is
- * the evidence behind a deduction from the expected deposit, so switching a
- * meal into a category that needs proof demands one.
+ * Receipts already on file show as real tiles served from their stored URLs,
+ * removable and addable up to five — but a required category can never be
+ * saved with none: the receipt is the evidence behind a deduction from the
+ * expected deposit, so switching a meal into a category that needs proof
+ * demands one. Which categories exist, and which need proof, is the server's
+ * answer — the page passes it in.
  */
 export function ExpenseDialog({
   item,
+  categories,
   dayLabel,
   onSave,
   onClose,
 }: {
   item: ExpenseItem | null
+  categories: ExpenseCategoryConfig[]
   dayLabel: string
-  /** The edited row, plus any newly attached files to upload with it */
-  onSave: (updated: ExpenseItem, files: File[]) => void
+  /** The row being corrected and the patch to send for it */
+  onSave: (item: ExpenseItem, patch: ExpensePatch) => void
   onClose: () => void
 }) {
   const [amount, setAmount] = useState(() => (item ? String(item.amount) : ""))
-  const [category, setCategory] = useState<ExpenseCategory>(item?.category ?? "Meals")
+  const [category, setCategory] = useState(item?.category ?? "")
   const [note, setNote] = useState(item?.note ?? "")
-  const [receipts, setReceipts] = useState<ReceiptEntry[]>(() => (item ? entriesFor(item) : []))
+  const [receipts, setReceipts] = useState<ReceiptEntry[]>(() =>
+    item ? storedEntries(item.receiptUrls) : [],
+  )
   const [errors, setErrors] = useState<FieldErrors>({})
   const backdropRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -71,7 +66,12 @@ export function ExpenseDialog({
   if (!item) return null
 
   const current = item
-  const receiptOptional = RECEIPT_OPTIONAL.includes(category)
+  /* The item's own category may have been deleted in Settings since it was
+     logged — keep it selectable so an untouched edit still saves */
+  const options = categories.some((c) => c.name === category)
+    ? categories.map((c) => c.name)
+    : [category, ...categories.map((c) => c.name)]
+  const receiptOptional = categories.find((c) => c.name === category)?.receiptExempt ?? false
 
   const handleSubmit = (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -84,17 +84,16 @@ export function ExpenseDialog({
     setErrors(next)
     if (Object.keys(next).length > 0) return
 
-    const files = receipts.map((r) => r.file).filter((f): f is File => f !== null)
-    onSave(
-      {
-        ...current,
-        category,
-        note: note.trim() || DEFAULT_NOTE[category],
-        amount: Math.round(value),
-        receiptCount: receipts.length,
-      },
-      files,
-    )
+    const keep = receipts.map((r) => r.url).filter((u): u is string => u !== null)
+    const add = receipts.map((r) => r.file).filter((f): f is File => f !== null)
+    const photosChanged = add.length > 0 || keep.length !== current.receiptUrls.length
+    onSave(current, {
+      category,
+      note: note.trim() || defaultNote(category),
+      // To the centavo, never to the peso — the slip the owner checks carries centavos
+      amount: Math.round(value * 100) / 100,
+      ...(photosChanged ? { receipts: { keep, add } } : {}),
+    })
   }
 
   return createPortal(
@@ -160,8 +159,8 @@ export function ExpenseDialog({
                   id="edit-category"
                   ariaLabel="Category"
                   value={category}
-                  onChange={(v) => setCategory(v as ExpenseCategory)}
-                  options={CATEGORIES.map((c) => ({ value: c, label: c }))}
+                  onChange={setCategory}
+                  options={options.map((c) => ({ value: c, label: c }))}
                 />
               </div>
             </FormField>
@@ -171,7 +170,7 @@ export function ExpenseDialog({
             <input
               id="edit-note"
               type="text"
-              placeholder={NOTE_PLACEHOLDER[category]}
+              placeholder={notePlaceholder(category)}
               value={note}
               onChange={(e) => setNote(e.target.value)}
               className={`${inputBase} ${inputOk}`}
@@ -183,7 +182,7 @@ export function ExpenseDialog({
             label={receiptOptional ? "Receipts (optional)" : "Receipts"}
             hint={
               receiptOptional
-                ? "Not required for staff meals and merienda"
+                ? "Not required for company-covered categories"
                 : "Up to 5 photos — remove or add as needed"
             }
             entries={receipts}

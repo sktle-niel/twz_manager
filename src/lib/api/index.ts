@@ -17,6 +17,6 @@ export const api: TwzApi = source === "sample" ? sampleApi : httpApi
 
 export const usingSampleData = source === "sample"
 
-export { ApiError } from "./client"
+export { ApiError, onUnauthorized } from "./client"
 export type { DayRange, Session, TwzApi } from "./contracts"
 export type * from "./types"

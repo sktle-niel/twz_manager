@@ -1,10 +1,10 @@
 import { useState } from "react"
 import type { SubmitEvent } from "react"
 import { LockIcon, LockOpenIcon, StorefrontIcon } from "@phosphor-icons/react"
-import { api } from "../lib/api"
+import { ApiError, api } from "../lib/api"
 import type { Manager } from "../lib/api"
 import { useApi } from "../lib/useApi"
-import { useSession } from "../lib/session"
+import { useOwnerSession } from "../lib/session"
 import { initials } from "../lib/format"
 import { FilterSelect, FormField, inputBad, inputBase, inputOk } from "../components/ui"
 import { Select } from "../components/Select"
@@ -76,7 +76,7 @@ function ManagerRow({
 
 export default function AdminManagersPage() {
   const { showToast } = useToast()
-  const { stores } = useSession()
+  const { stores } = useOwnerSession()
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [branch, setBranch] = useState(stores[0].id)
@@ -117,8 +117,13 @@ export default function AdminManagersPage() {
   async function reassign(manager: Manager, storeId: string) {
     if (isLocked(manager.id) || storeId === manager.storeId) return
     const holder = managers.find((m) => m.id !== manager.id && m.storeId === storeId)
-    // The swap is the server's to make — it owns the one-branch-one-manager rule
-    await api.assignBranch(manager.id, storeId)
+    try {
+      // The swap is the server's to make — it owns the one-branch-one-manager rule
+      await api.assignBranch(manager.id, storeId)
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "The reassignment did not go through.")
+      return
+    }
     loaded.reload()
     showToast(
       holder
@@ -146,17 +151,23 @@ export default function AdminManagersPage() {
     if (!issueBranch) return
 
     setSaving(true)
-    const manager = await api.issueManager({
-      name: name.trim(),
-      email: email.trim(),
-      storeId: issueBranch,
-    })
-    loaded.reload()
-    setName("")
-    setEmail("")
-    setBranch("")
-    setSaving(false)
-    showToast(`Account issued for ${manager.name} · ${storeName(manager.storeId)}.`)
+    try {
+      const manager = await api.issueManager({
+        name: name.trim(),
+        email: email.trim(),
+        storeId: issueBranch,
+      })
+      loaded.reload()
+      setName("")
+      setEmail("")
+      setBranch("")
+      showToast(`Account issued for ${manager.name} · ${storeName(manager.storeId)}.`)
+    } catch (err) {
+      if (err instanceof ApiError && err.fields) setErrors(err.fields)
+      showToast(err instanceof ApiError ? err.message : "The account could not be issued.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -186,18 +197,31 @@ export default function AdminManagersPage() {
               swaps the two managers. Each manager only ever sees their assigned branch.
             </p>
           </div>
-          <ul className="mt-1 divide-y divide-line">
-            {managers.map((m) => (
-              <ManagerRow
-                key={m.id}
-                manager={m}
-                options={optionsFor(m)}
-                locked={isLocked(m.id)}
-                onToggleLock={() => toggleLock(m.id)}
-                onBranchChange={(storeId) => reassign(m, storeId)}
-              />
-            ))}
-          </ul>
+          {loaded.error ? (
+            <p role="alert" className="flex flex-wrap items-center gap-2 px-5 py-6 text-[13px] text-claret">
+              The accounts could not load.
+              <button
+                type="button"
+                onClick={loaded.reload}
+                className="font-medium underline underline-offset-4"
+              >
+                Try again
+              </button>
+            </p>
+          ) : (
+            <ul className="mt-1 divide-y divide-line">
+              {managers.map((m) => (
+                <ManagerRow
+                  key={m.id}
+                  manager={m}
+                  options={optionsFor(m)}
+                  locked={isLocked(m.id)}
+                  onToggleLock={() => toggleLock(m.id)}
+                  onBranchChange={(storeId) => void reassign(m, storeId)}
+                />
+              ))}
+            </ul>
+          )}
         </section>
 
         {/* Issue an account */}

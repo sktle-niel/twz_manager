@@ -7,6 +7,10 @@
  * ends up on the page; an httpOnly cookie is not. The backend sets it at
  * sign-in and the browser never sees it.
  *
+ * Every 401 raises the `unauthorized` event so the session provider can drop
+ * to the signed-out state — a session can expire mid-use, and the page that
+ * happened to make the next request is the wrong place to handle that.
+ *
  * Nothing here knows about Loyverse. The POS token has no scopes at all — it
  * grants full write access to the whole merchant account — so it lives only on
  * the backend. See docs/LOYVERSE.md.
@@ -28,6 +32,20 @@ export class ApiError extends Error {
 }
 
 const BASE = import.meta.env.VITE_API_URL ?? "/api"
+
+/* Long enough for a slow mobile connection, short enough that a stalled
+   request surfaces as an error with a retry rather than an endless spinner.
+   Uploads carry photos over shop wifi, so they get several times more. */
+const READ_TIMEOUT_MS = 20_000
+const UPLOAD_TIMEOUT_MS = 120_000
+
+const UNAUTHORIZED_EVENT = "twz:unauthorized"
+
+/** Fired whenever any request comes back 401. Returns the unsubscribe. */
+export function onUnauthorized(handler: () => void): () => void {
+  window.addEventListener(UNAUTHORIZED_EVENT, handler)
+  return () => window.removeEventListener(UNAUTHORIZED_EVENT, handler)
+}
 
 /** Errors a person can act on, rather than the raw failure */
 function humanise(status: number, body: unknown): string {
@@ -53,17 +71,25 @@ async function parse(res: Response): Promise<unknown> {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, timeoutMs = READ_TIMEOUT_MS): Promise<T> {
   let res: Response
   try {
-    res = await fetch(`${BASE}${path}`, { credentials: "include", ...init })
-  } catch {
+    res = await fetch(`${BASE}${path}`, {
+      credentials: "include",
+      signal: AbortSignal.timeout(timeoutMs),
+      ...init,
+    })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "TimeoutError") {
+      throw new ApiError(0, "The server is taking too long. Try again.")
+    }
     // fetch only rejects on a transport failure, so this is the offline case
     throw new ApiError(0, "No connection. Check the branch's internet and try again.")
   }
 
   const body = await parse(res)
   if (!res.ok) {
+    if (res.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
     const fields =
       typeof body === "object" && body !== null && "fields" in body
         ? ((body as { fields?: Record<string, string> }).fields ?? undefined)
@@ -98,16 +124,24 @@ export function send<T>(
   })
 }
 
-/** Multipart, for anything carrying a photo */
-export function upload<T>(path: string, fields: Record<string, unknown>, files: Record<string, File[]>) {
+/**
+ * Multipart, for anything carrying a photo. One convention across every
+ * endpoint: the non-file fields travel as a single `payload` part holding the
+ * same JSON object a bodied request would send, and each file list becomes
+ * repeated parts under its own name. The backend parses `payload` exactly as
+ * it would a JSON body — no per-endpoint field encoding to reverse-engineer.
+ */
+export function upload<T>(
+  method: "POST" | "PATCH",
+  path: string,
+  payload: Record<string, unknown>,
+  files: Record<string, File[]>,
+) {
   const form = new FormData()
-  for (const [key, value] of Object.entries(fields)) {
-    if (value === undefined || value === null) continue
-    form.append(key, typeof value === "string" ? value : JSON.stringify(value))
-  }
+  form.append("payload", JSON.stringify(payload))
   for (const [key, list] of Object.entries(files)) {
     list.forEach((file) => form.append(key, file, file.name))
   }
   // No Content-Type header: the browser must set the multipart boundary itself
-  return request<T>(path, { method: "POST", body: form })
+  return request<T>(path, { method, body: form }, UPLOAD_TIMEOUT_MS)
 }

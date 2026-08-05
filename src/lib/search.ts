@@ -13,7 +13,7 @@
  * The one thing substring matching cannot do is understand "7/3/2026", so a
  * date hint is parsed alongside it and matched against the record's own date.
  */
-import { peso, rowDate, shortDate } from "./format"
+import { clockLabel, peso, rowDate, shortDate } from "./format"
 import { api } from "./api"
 import type { DayAudit, DayStatus, ExpenseItem, Manager, Store } from "./api"
 import { addDays, dayKey, fromDayKey, startOfDay } from "./dateRange"
@@ -233,14 +233,14 @@ export async function buildCorpus(scope: SearchScope, today: Date): Promise<Sear
             { label: "Category", value: item.category },
             { label: "Branch", value: store.name },
             { label: "Day", value: rowDate(d) },
-            { label: "Logged at", value: item.time },
+            { label: "Logged at", value: clockLabel(new Date(item.at)) },
             { label: "Amount", value: peso.format(item.amount) },
             {
               label: "Receipts",
               value:
-                item.receiptCount === 0
+                item.receiptUrls.length === 0
                   ? "None — company-covered"
-                  : `${item.receiptCount} on file`,
+                  : `${item.receiptUrls.length} on file`,
             },
           ],
           to: routes.expense.to,
@@ -253,8 +253,8 @@ export async function buildCorpus(scope: SearchScope, today: Date): Promise<Sear
             store.name,
             words,
             item.amount,
-            item.time,
-            item.receiptCount === 0 ? "no receipt" : "receipt",
+            clockLabel(new Date(item.at)),
+            item.receiptUrls.length === 0 ? "no receipt" : "receipt",
           ),
         })
       }

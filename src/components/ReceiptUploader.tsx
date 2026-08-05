@@ -4,17 +4,21 @@ import { newReceiptEntry } from "../lib/receipts"
 import type { ReceiptEntry } from "../lib/receipts"
 
 function Thumb({ entry, onRemove }: { entry: ReceiptEntry; onRemove: () => void }) {
-  const [url, setUrl] = useState<string | null>(null)
+  const [fileUrl, setFileUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!entry.file) {
-      setUrl(null)
+      setFileUrl(null)
       return
     }
     const objectUrl = URL.createObjectURL(entry.file)
-    setUrl(objectUrl)
+    setFileUrl(objectUrl)
     return () => URL.revokeObjectURL(objectUrl)
   }, [entry.file])
+
+  /* A photo picked this session previews from the file; one already stored
+     previews from the backend's own URL */
+  const url = fileUrl ?? entry.url
 
   return (
     <div className="relative aspect-square overflow-hidden rounded-lg border border-line bg-canvas">

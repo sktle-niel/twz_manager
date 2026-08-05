@@ -4,7 +4,7 @@ import { peso } from "../lib/format"
 import { api } from "../lib/api"
 import type { DayAudit, DayStatus, Store } from "../lib/api"
 import { useApi } from "../lib/useApi"
-import { useSession } from "../lib/session"
+import { useOwnerSession } from "../lib/session"
 import { FilterSelect } from "../components/ui"
 import { StatCard } from "../components/StatCard"
 import type { Stat } from "../components/StatCard"
@@ -39,7 +39,7 @@ const PAGE_SIZE = 20
 const MAX_ROWS = 2000
 
 export default function AdminHistoryPage() {
-  const { stores } = useSession()
+  const { stores } = useOwnerSession()
   const [storeId, setStoreId] = useState("all")
   const [preset, setPreset] = useState<RangePreset>("last30")
   const [status, setStatus] = useState<StatusFilter>("all")
@@ -189,7 +189,20 @@ export default function AdminHistoryPage() {
 
         <AuditHeader cols={cols} withBranch={allBranches} />
 
-        {rows.length === 0 ? (
+        {audits.error ? (
+          <p role="alert" className="flex flex-wrap items-center justify-center gap-2 px-5 py-10 text-center text-[14px] text-claret">
+            {audits.error}
+            <button
+              type="button"
+              onClick={audits.reload}
+              className="font-medium underline underline-offset-4"
+            >
+              Try again
+            </button>
+          </p>
+        ) : audits.loading && rows.length === 0 ? (
+          <p className="px-5 py-10 text-center text-[14px] text-mute">Loading…</p>
+        ) : rows.length === 0 ? (
           <p className="px-5 py-10 text-center text-[14px] text-mute">
             No days match these filters.
           </p>
