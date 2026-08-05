@@ -75,10 +75,11 @@ npm run build    # tsc -b && vite build
 npm run lint
 ```
 
-In sample mode you boot signed in as the first manager; sign out to see the login flow. Known
-accounts are `marvin.deocampo` (Arevalo), `joel.sarabia` (Molo), `rhea.villanueva` (Jaro), and
-**`twz.owner`** for the owner side — any password of 6+ characters works. Unknown identifiers are
-rejected, the way a real backend would.
+Sample mode starts at the sign-in screen like the real thing — nothing inside is reachable
+without an account. Known accounts are `marvin.deocampo` (Arevalo), `joel.sarabia` (Molo),
+`rhea.villanueva` (Jaro), and **`twz.owner`** for the owner side — any password of 6+ characters
+works, and unknown identifiers are rejected the way a real backend would. The session behaves
+like a session cookie: a reload keeps you signed in, closing the tab ends it.
 
 The routes are role-guarded: a manager account lands on `/` and cannot open `/admin`; the owner
 lands on `/admin` and cannot open the manager side; signed out, everything walks you to

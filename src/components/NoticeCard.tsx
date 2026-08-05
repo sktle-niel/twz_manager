@@ -45,11 +45,15 @@ export function NoticeCard({
   subtitle,
   notices,
   loading,
+  error,
+  onRetry,
 }: {
   title: string
   subtitle?: string
   notices: Notice[]
   loading?: boolean
+  error?: string | null
+  onRetry?: () => void
 }) {
   return (
     <section className="rounded-xl border border-line bg-surface" data-rise>
@@ -58,7 +62,21 @@ export function NoticeCard({
         {subtitle && <p className="mt-0.5 text-[13px] text-mute">{subtitle}</p>}
       </div>
       <ul className="divide-y divide-line border-t border-line">
-        {notices.length === 0 ? (
+        {error ? (
+          /* A failed read must never pass for a clean bill of health */
+          <li role="alert" className="px-5 py-6 text-center text-[13px] text-claret">
+            The status could not load.{" "}
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="font-medium underline underline-offset-4"
+              >
+                Try again
+              </button>
+            )}
+          </li>
+        ) : notices.length === 0 ? (
           <li className="px-5 py-6 text-center text-[13.5px] text-mute">
             {loading ? "Loading…" : "Nothing needs attention right now."}
           </li>

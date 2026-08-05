@@ -186,6 +186,8 @@ export default function DashboardPage() {
             subtitle={`What needs attention at the ${store.name} branch.`}
             notices={notices.data ?? []}
             loading={notices.loading}
+            error={notices.error}
+            onRetry={notices.reload}
           />
         </div>
 
