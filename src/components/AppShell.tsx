@@ -11,6 +11,8 @@ import {
 } from "@phosphor-icons/react"
 import type { Icon } from "@phosphor-icons/react"
 import logo from "../assets/twz-logo-light.png"
+import crew from "../assets/twz-crew.webp"
+import { stockAvatar } from "../lib/avatar"
 import { useRouteReveal, useSheetEnter } from "../lib/motion"
 import { useAuth, useManagerSession } from "../lib/session"
 import { useToast } from "../lib/toast"
@@ -106,8 +108,9 @@ function NewEntrySheet({ open, onClose }: { open: boolean; onClose: () => void }
 export default function AppShell() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const { showToast } = useToast()
-  const { store } = useManagerSession()
+  const { manager, store } = useManagerSession()
   const { signOut } = useAuth()
+  const avatar = manager.photoUrl ?? stockAvatar(manager.avatarKind)
   const navigate = useNavigate()
   const mainRef = useRef<HTMLElement>(null)
   const { pathname } = useLocation()
@@ -125,6 +128,18 @@ export default function AppShell() {
 
   return (
     <div className="min-h-[100dvh] lg:pl-60">
+      {/* The crew, faint on the canvas behind every page. Cards and tables sit
+          on opaque surfaces, so the art only shows in the breathing room and
+          never under a figure someone has to read. */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10">
+        <img
+          src={crew}
+          alt=""
+          draggable={false}
+          className="absolute bottom-0 right-0 h-[40vh] w-auto opacity-[0.06] select-none lg:h-[min(62vh,560px)]"
+        />
+      </div>
+
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 border-r border-line bg-canvas lg:block">
         <div className="flex h-full flex-col p-4">
@@ -157,6 +172,24 @@ export default function AppShell() {
             ))}
           </nav>
           <div className="mt-auto border-t border-line pt-3">
+            {/* Whose session this is, wherever in the app they are */}
+            <Link
+              to="/account"
+              className="flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors duration-200 ease-quiet hover:bg-black/[0.04]"
+            >
+              <img
+                src={avatar}
+                alt=""
+                className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-line"
+                draggable={false}
+              />
+              <span className="min-w-0">
+                <span className="block truncate text-[13px] font-medium text-ink">
+                  {manager.name}
+                </span>
+                <span className="block truncate text-[11.5px] text-mute">{store.name} branch</span>
+              </span>
+            </Link>
             <button
               type="button"
               onClick={() => void handleSignOut()}
@@ -169,7 +202,7 @@ export default function AppShell() {
         </div>
       </aside>
 
-      {/* Mobile top bar: centered logo, account on the right */}
+      {/* Mobile top bar: centered logo, the account's own face on the right */}
       <header className="grid h-14 grid-cols-[44px_1fr_44px] items-center border-b border-line bg-canvas px-2 lg:hidden">
         <span aria-hidden="true" />
         <Link to="/" className="inline-flex items-center justify-self-center">
@@ -178,14 +211,17 @@ export default function AppShell() {
         <NavLink
           to="/account"
           aria-label="Account"
-          className={({ isActive }) =>
-            `flex h-11 w-11 items-center justify-center rounded-lg transition-colors duration-200 ease-quiet ${
-              isActive ? "text-brand-deep" : "text-ink-soft"
-            }`
-          }
+          className="flex h-11 w-11 items-center justify-center"
         >
           {({ isActive }) => (
-            <UserCircleIcon size={24} weight={isActive ? "fill" : "regular"} aria-hidden="true" />
+            <img
+              src={avatar}
+              alt=""
+              draggable={false}
+              className={`h-8 w-8 rounded-full object-cover transition-shadow duration-200 ease-quiet ${
+                isActive ? "ring-2 ring-brand-deep" : "ring-1 ring-line"
+              }`}
+            />
           )}
         </NavLink>
       </header>

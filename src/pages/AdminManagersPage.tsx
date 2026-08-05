@@ -1,37 +1,51 @@
 import { useState } from "react"
 import type { SubmitEvent } from "react"
-import { LockIcon, LockOpenIcon, StorefrontIcon } from "@phosphor-icons/react"
+import { KeyIcon, LockIcon, LockOpenIcon, StorefrontIcon } from "@phosphor-icons/react"
 import { ApiError, api } from "../lib/api"
 import type { Manager } from "../lib/api"
 import { useApi } from "../lib/useApi"
 import { useOwnerSession } from "../lib/session"
-import { initials } from "../lib/format"
+import { stockAvatar } from "../lib/avatar"
 import { FilterSelect, FormField, inputBad, inputBase, inputOk } from "../components/ui"
 import { Select } from "../components/Select"
 import type { SelectOption } from "../components/Select"
 import { useToast } from "../lib/toast"
 
-type FieldErrors = { name?: string; email?: string }
+type FieldErrors = { name?: string; username?: string; password?: string }
+type ResetErrors = { pin?: string; password?: string; confirm?: string; form?: string }
 
 function ManagerRow({
   manager,
   options,
   locked,
+  resetting,
   onToggleLock,
   onBranchChange,
+  onToggleReset,
 }: {
   manager: Manager
   /* Every branch: their own, the free ones, and occupied ones (which swap) */
   options: SelectOption[]
   locked: boolean
+  resetting: boolean
   onToggleLock: () => void
   onBranchChange: (storeId: string) => void
+  onToggleReset: () => void
 }) {
   return (
-    <li className="flex flex-wrap items-center gap-3 px-5 py-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sage text-[12px] font-semibold text-sage-ink">
-        {initials(manager.name)}
-      </span>
+    /*
+     * Two lines on a phone, one on wider screens. The name owns the first
+     * line in full; the branch select and the two actions wrap onto their
+     * own row (`w-full` forces the break) instead of squeezing the name down
+     * to a sliver beside a fixed-width select.
+     */
+    <div className="flex flex-wrap items-center gap-3 px-5 py-3">
+      <img
+        src={manager.photoUrl ?? stockAvatar(manager.avatarKind)}
+        alt=""
+        className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-line"
+        draggable={false}
+      />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <span className="truncate text-[14px] font-medium text-ink-soft">{manager.name}</span>
@@ -41,36 +55,156 @@ function ManagerRow({
             </span>
           )}
         </span>
-        <span className="block truncate text-[12px] text-mute">{manager.email}</span>
+        {/* The username is the credential now, so it is what the row shows */}
+        <span className="block truncate text-[12px] text-mute">{manager.username}</span>
       </span>
-      <FilterSelect
-        ariaLabel={`Branch for ${manager.name}`}
-        icon={<StorefrontIcon size={15} weight="bold" aria-hidden="true" />}
-        value={manager.storeId}
-        onChange={onBranchChange}
-        options={options}
-        disabled={locked}
-        className="w-44"
-      />
+      <div className="flex w-full items-center gap-2 pl-12 sm:w-auto sm:pl-0">
+        <FilterSelect
+          ariaLabel={`Branch for ${manager.name}`}
+          icon={<StorefrontIcon size={15} weight="bold" aria-hidden="true" />}
+          value={manager.storeId}
+          onChange={onBranchChange}
+          options={options}
+          disabled={locked}
+          className="min-w-0 flex-1 sm:w-44 sm:flex-none"
+        />
+        <button
+          type="button"
+          onClick={onToggleReset}
+          aria-pressed={resetting}
+          aria-label={`Set a new password for ${manager.name}`}
+          title="Set a new password"
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ease-quiet hover:bg-black/[0.04] ${
+            resetting ? "text-brand-deep" : "text-mute hover:text-ink"
+          }`}
+        >
+          <KeyIcon size={16} weight="bold" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={onToggleLock}
+          aria-pressed={locked}
+          aria-label={
+            locked ? `Unlock branch for ${manager.name}` : `Lock branch for ${manager.name}`
+          }
+          title={locked ? "Locked. Click to allow changes" : "Unlocked. Click to lock"}
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ease-quiet hover:bg-black/[0.04] ${
+            locked ? "text-mute hover:text-ink" : "text-brand-deep"
+          }`}
+        >
+          {locked ? (
+            <LockIcon size={16} weight="fill" aria-hidden="true" />
+          ) : (
+            <LockOpenIcon size={16} weight="bold" aria-hidden="true" />
+          )}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/*
+ * Recovery, in the only shape left once accounts have no email: the manager
+ * asks the owner in person, and the owner types a new password here. The PIN
+ * is the second lock — being signed in as the owner is not enough, so an
+ * unattended laptop cannot be used to take a branch account.
+ */
+function ResetPanel({
+  manager,
+  onDone,
+}: {
+  manager: Manager
+  onDone: (password: string) => void
+}) {
+  const [pin, setPin] = useState("")
+  const [password, setPassword] = useState("")
+  const [confirm, setConfirm] = useState("")
+  const [errors, setErrors] = useState<ResetErrors>({})
+  const [saving, setSaving] = useState(false)
+
+  async function submit(e: SubmitEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const next: ResetErrors = {}
+    if (!pin.trim()) next.pin = "Enter the recovery PIN."
+    if (!password) next.password = "Choose a new password."
+    else if (password.length < 8) next.password = "Password must be at least 8 characters."
+    if (confirm !== password) next.confirm = "These two do not match."
+    setErrors(next)
+    if (Object.keys(next).length > 0) return
+
+    setSaving(true)
+    try {
+      await api.setManagerPassword(manager.id, pin.trim(), password)
+      onDone(password)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setErrors(err.fields ?? { form: err.message })
+      } else {
+        setErrors({ form: "That did not go through. Try again." })
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} noValidate className="border-t border-line bg-canvas px-5 py-4">
+      <p className="text-[13px] text-mute">
+        Set a new password for <span className="font-medium text-ink-soft">{manager.name}</span>.
+        Their old one is not needed. Hand the new one over in person.
+      </p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <FormField id={`pin-${manager.id}`} label="Recovery PIN" error={errors.pin}>
+          <input
+            id={`pin-${manager.id}`}
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="4 digits"
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            aria-invalid={Boolean(errors.pin)}
+            className={`${inputBase} ${errors.pin ? inputBad : inputOk}`}
+          />
+        </FormField>
+        <FormField id={`pw-${manager.id}`} label="New password" error={errors.password}>
+          <input
+            id={`pw-${manager.id}`}
+            type="text"
+            autoComplete="off"
+            placeholder="At least 8 characters"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            aria-invalid={Boolean(errors.password)}
+            className={`${inputBase} ${errors.password ? inputBad : inputOk}`}
+          />
+        </FormField>
+        <FormField id={`pw2-${manager.id}`} label="Type it again" error={errors.confirm}>
+          <input
+            id={`pw2-${manager.id}`}
+            type="text"
+            autoComplete="off"
+            placeholder="The same password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            aria-invalid={Boolean(errors.confirm)}
+            className={`${inputBase} ${errors.confirm ? inputBad : inputOk}`}
+          />
+        </FormField>
+      </div>
+      {errors.form && (
+        <p role="alert" className="mt-2 text-[13px] text-claret">
+          {errors.form}
+        </p>
+      )}
       <button
-        type="button"
-        onClick={onToggleLock}
-        aria-pressed={locked}
-        aria-label={
-          locked ? `Unlock branch for ${manager.name}` : `Lock branch for ${manager.name}`
-        }
-        title={locked ? "Locked — click to allow changes" : "Unlocked — click to lock"}
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ease-quiet hover:bg-black/[0.04] ${
-          locked ? "text-mute hover:text-ink" : "text-brand-deep"
-        }`}
+        type="submit"
+        disabled={saving}
+        className="mt-3 flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
       >
-        {locked ? (
-          <LockIcon size={16} weight="fill" aria-hidden="true" />
-        ) : (
-          <LockOpenIcon size={16} weight="bold" aria-hidden="true" />
-        )}
+        {saving ? "Setting" : "Set password"}
       </button>
-    </li>
+    </form>
   )
 }
 
@@ -78,13 +212,15 @@ export default function AdminManagersPage() {
   const { showToast } = useToast()
   const { stores } = useOwnerSession()
   const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
   const [branch, setBranch] = useState(stores[0].id)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [saving, setSaving] = useState(false)
   // Locked by default so a stray click never moves a manager; the admin
   // unlocks a row deliberately before reassigning it
   const [locked, setLocked] = useState<Record<string, boolean>>({})
+  const [resettingId, setResettingId] = useState<string | null>(null)
 
   const isLocked = (id: string) => locked[id] ?? true
   const toggleLock = (id: string) => setLocked((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }))
@@ -127,7 +263,7 @@ export default function AdminManagersPage() {
     loaded.reload()
     showToast(
       holder
-        ? `Swapped — ${manager.name} → ${storeName(storeId)}, ${holder.name} → ${storeName(manager.storeId)}.`
+        ? `Swapped: ${manager.name} → ${storeName(storeId)}, ${holder.name} → ${storeName(manager.storeId)}.`
         : `${manager.name} moved to ${storeName(storeId)}.`,
     )
   }
@@ -135,10 +271,12 @@ export default function AdminManagersPage() {
   function validate(): FieldErrors {
     const next: FieldErrors = {}
     if (!name.trim()) next.name = "Enter the manager's full name."
-    const mail = email.trim()
-    if (!mail) next.email = "Enter a Gmail address."
-    else if (!/^[^\s@]+@gmail\.com$/i.test(mail))
-      next.email = "That doesn't look like a valid Gmail address."
+    const handle = username.trim().toLowerCase()
+    if (!handle) next.username = "Enter a username."
+    else if (!/^[a-z0-9._-]+$/.test(handle))
+      next.username = "Letters, numbers, dots, dashes and underscores only."
+    if (!password) next.password = "Set a first password."
+    else if (password.length < 8) next.password = "Password must be at least 8 characters."
     return next
   }
 
@@ -154,12 +292,14 @@ export default function AdminManagersPage() {
     try {
       const manager = await api.issueManager({
         name: name.trim(),
-        email: email.trim(),
+        username: username.trim().toLowerCase(),
         storeId: issueBranch,
+        password,
       })
       loaded.reload()
       setName("")
-      setEmail("")
+      setUsername("")
+      setPassword("")
       setBranch("")
       showToast(`Account issued for ${manager.name} · ${storeName(manager.storeId)}.`)
     } catch (err) {
@@ -181,10 +321,7 @@ export default function AdminManagersPage() {
 
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
         {/* Team */}
-        <section
-          className="rounded-xl border border-line bg-surface"
-          data-rise
-        >
+        <section className="rounded-xl border border-line bg-surface" data-rise>
           <div className="px-5 pb-1 pt-4">
             <div className="flex items-baseline justify-between">
               <h2 className="text-[15px] font-semibold text-ink">Team</h2>
@@ -193,8 +330,8 @@ export default function AdminManagersPage() {
               </p>
             </div>
             <p className="mt-0.5 text-[13px] text-mute">
-              Each row is locked by default — tap the lock to reassign. Picking a branch already held
-              swaps the two managers. Each manager only ever sees their assigned branch.
+              Each row is locked by default. Tap the lock to reassign. Picking a branch already held
+              swaps the two managers. The key sets a new password for a manager who is locked out.
             </p>
           </div>
           {loaded.error ? (
@@ -211,27 +348,37 @@ export default function AdminManagersPage() {
           ) : (
             <ul className="mt-1 divide-y divide-line">
               {managers.map((m) => (
-                <ManagerRow
-                  key={m.id}
-                  manager={m}
-                  options={optionsFor(m)}
-                  locked={isLocked(m.id)}
-                  onToggleLock={() => toggleLock(m.id)}
-                  onBranchChange={(storeId) => void reassign(m, storeId)}
-                />
+                <li key={m.id}>
+                  <ManagerRow
+                    manager={m}
+                    options={optionsFor(m)}
+                    locked={isLocked(m.id)}
+                    resetting={resettingId === m.id}
+                    onToggleLock={() => toggleLock(m.id)}
+                    onBranchChange={(storeId) => void reassign(m, storeId)}
+                    onToggleReset={() => setResettingId(resettingId === m.id ? null : m.id)}
+                  />
+                  {resettingId === m.id && (
+                    <ResetPanel
+                      manager={m}
+                      onDone={() => {
+                        setResettingId(null)
+                        showToast(`New password set for ${m.name}. Tell them in person.`)
+                      }}
+                    />
+                  )}
+                </li>
               ))}
             </ul>
           )}
         </section>
 
         {/* Issue an account */}
-        <section
-          className="rounded-xl border border-line bg-surface p-5 sm:p-6"
-          data-rise
-        >
+        <section className="rounded-xl border border-line bg-surface p-5 sm:p-6" data-rise>
           <h2 className="text-[15px] font-semibold text-ink">Issue an account</h2>
           <p className="mt-0.5 text-[13px] text-mute">
-            The manager signs in with this Gmail and a password you set together.
+            The manager signs in with this username and password. There is no email anywhere in the
+            system, so hand both over in person.
           </p>
           <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -271,22 +418,38 @@ export default function AdminManagersPage() {
               </FormField>
             </div>
 
-            <FormField id="manager-email" label="Gmail" error={errors.email}>
-              <input
-                id="manager-email"
-                type="email"
-                autoComplete="off"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder="name@gmail.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                aria-invalid={Boolean(errors.email)}
-                aria-describedby={errors.email ? "manager-email-error" : undefined}
-                className={`${inputBase} ${errors.email ? inputBad : inputOk}`}
-              />
-            </FormField>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField id="manager-username" label="Username" error={errors.username}>
+                <input
+                  id="manager-username"
+                  type="text"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  placeholder="firstname.lastname"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  aria-invalid={Boolean(errors.username)}
+                  aria-describedby={errors.username ? "manager-username-error" : undefined}
+                  className={`${inputBase} ${errors.username ? inputBad : inputOk}`}
+                />
+              </FormField>
+              <FormField id="manager-password" label="First password" error={errors.password}>
+                <input
+                  id="manager-password"
+                  type="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="At least 8 characters"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  aria-invalid={Boolean(errors.password)}
+                  aria-describedby={errors.password ? "manager-password-error" : undefined}
+                  className={`${inputBase} ${errors.password ? inputBad : inputOk}`}
+                />
+              </FormField>
+            </div>
 
             <div className="pt-1">
               <button

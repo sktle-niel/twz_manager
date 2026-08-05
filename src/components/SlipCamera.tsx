@@ -25,7 +25,7 @@ const GUIDES: Record<string, Guide> = {
   none: { tone: "busy", text: "Point the camera at the deposit slip" },
   closer: { tone: "busy", text: "Fill the frame with the slip" },
   faint: { tone: "busy", text: "Get closer so the printing shows" },
-  ready: { tone: "ok", text: "Looks good — hold steady" },
+  ready: { tone: "ok", text: "Looks good, hold steady" },
 }
 
 export function SlipCamera({
@@ -49,7 +49,7 @@ export function SlipCamera({
     // Undefined outside a secure context, which is the usual reason this fails
     if (!navigator.mediaDevices?.getUserMedia) {
       setError(
-        "This browser will not open the camera here. It needs a secure (https) connection — attach the photo from the gallery instead.",
+        "This browser will not open the camera here. It needs a secure (https) connection. Attach the photo from the gallery instead.",
       )
       return
     }

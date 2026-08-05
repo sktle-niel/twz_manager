@@ -239,7 +239,7 @@ export async function buildCorpus(scope: SearchScope, today: Date): Promise<Sear
               label: "Receipts",
               value:
                 item.receiptUrls.length === 0
-                  ? "None — company-covered"
+                  ? "None (company-covered)"
                   : `${item.receiptUrls.length} on file`,
             },
           ],
@@ -282,7 +282,7 @@ export async function buildCorpus(scope: SearchScope, today: Date): Promise<Sear
       const covers =
         days.length === 1
           ? rowDate(days[0])
-          : `${shortDate(days[0])} – ${shortDate(days[days.length - 1])}`
+          : `${shortDate(days[0])} - ${shortDate(days[days.length - 1])}`
       const status = dep.short ? "Discrepancy" : "Matched"
 
       records.push({
@@ -361,7 +361,6 @@ export async function buildCorpus(scope: SearchScope, today: Date): Promise<Sear
         details: [
           { label: "Name", value: m.name },
           { label: "Username", value: m.username },
-          { label: "Gmail", value: m.email },
           { label: "Branch", value: store?.name ?? "Unassigned" },
           {
             label: "Account",
@@ -376,7 +375,6 @@ export async function buildCorpus(scope: SearchScope, today: Date): Promise<Sear
           "manager account",
           m.name,
           m.username,
-          m.email,
           store?.name,
           m.active ? "active" : "disabled",
         ),

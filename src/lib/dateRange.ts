@@ -123,10 +123,10 @@ export function matchPreset(range: DateRange, today: Date): PresetKey | null {
   return null
 }
 
-/* "Last 7 days" when the range matches a preset, otherwise "Jul 18 – Jul 24" */
+/* "Last 7 days" when the range matches a preset, otherwise "Jul 18 - Jul 24" */
 export function rangeLabel(range: DateRange, today: Date): string {
   const key = matchPreset(range, today)
   if (key) return PRESETS.find((p) => p.key === key)?.label ?? ""
   if (sameDay(range.start, range.end)) return shortDate(range.start)
-  return `${shortDate(range.start)} – ${shortDate(range.end)}`
+  return `${shortDate(range.start)} - ${shortDate(range.end)}`
 }

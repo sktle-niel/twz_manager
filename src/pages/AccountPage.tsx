@@ -6,11 +6,12 @@ import { FormField, inputBad, inputBase, inputOk } from "../components/ui"
 import { AvatarField } from "../components/AvatarField"
 import { SignInCard } from "../components/SignInCard"
 import { ApiError, api } from "../lib/api"
+import type { AvatarKind } from "../lib/api"
 import { useApi } from "../lib/useApi"
 import { useAuth, useManagerSession } from "../lib/session"
 import { useToast } from "../lib/toast"
 
-type ProfileErrors = { name?: string; username?: string; email?: string }
+type ProfileErrors = { name?: string; username?: string }
 type PasswordErrors = { current?: string; next?: string; confirm?: string }
 
 export default function AccountPage() {
@@ -21,8 +22,8 @@ export default function AccountPage() {
 
   const [fullName, setFullName] = useState(manager.name)
   const [username, setUsername] = useState(manager.username)
-  const [email, setEmail] = useState(manager.email)
-  /* Optional: with none attached the avatar falls back to the account's initials */
+  /* Optional: with none attached the chosen stock avatar stands in (girl by default) */
+  const [avatarKind, setAvatarKind] = useState<AvatarKind>(manager.avatarKind ?? "girl")
   const [photo, setPhoto] = useState<File | null>(null)
   const [removePhoto, setRemovePhoto] = useState(false)
   const [profileErrors, setProfileErrors] = useState<ProfileErrors>({})
@@ -46,7 +47,7 @@ export default function AccountPage() {
       const session = await api.updateProfile({
         name: fullName,
         username,
-        email,
+        avatarKind,
         ...(photo ? { photo } : {}),
         ...(removePhoto && !photo ? { removePhoto: true } : {}),
       })
@@ -67,7 +68,7 @@ export default function AccountPage() {
     const next: PasswordErrors = {}
     if (!currentPassword) next.current = "Enter your current password."
     if (!newPassword) next.next = "Enter a new password."
-    else if (newPassword.length < 6) next.next = "Password must be at least 6 characters."
+    else if (newPassword.length < 8) next.next = "Password must be at least 8 characters."
     if (confirmPassword !== newPassword) next.confirm = "Passwords do not match."
     setPasswordErrors(next)
     if (Object.keys(next).length > 0) return
@@ -116,11 +117,13 @@ export default function AccountPage() {
           <AvatarField
             id="account-photo"
             name={fullName}
+            avatarKind={avatarKind}
+            onAvatarKind={setAvatarKind}
             file={photo}
             existingUrl={removePhoto ? null : manager.photoUrl}
             onChange={setPhoto}
             onRemoveExisting={() => setRemovePhoto(true)}
-            hint="Optional — your initials stand in without one."
+            hint="Pick a standard avatar, or attach your own photo."
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField id="account-name" label="Full name" error={profileErrors.name}>
@@ -151,21 +154,6 @@ export default function AccountPage() {
               />
             </FormField>
           </div>
-          <FormField id="account-email" label="Gmail" error={profileErrors.email}>
-            <input
-              id="account-email"
-              type="email"
-              autoComplete="email"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              aria-invalid={Boolean(profileErrors.email)}
-              aria-describedby={profileErrors.email ? "account-email-error" : undefined}
-              className={`${inputBase} ${profileErrors.email ? inputBad : inputOk}`}
-            />
-          </FormField>
           <FormField
             id="account-branch"
             label="Branch"

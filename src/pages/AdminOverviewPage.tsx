@@ -60,6 +60,7 @@ export default function AdminOverviewPage() {
     : days.map((d) => ({ label: shortDate(d), amount: perDay.get(dayKey(d)) ?? 0 }))
 
   const grossTotal = inScope.reduce((sum, r) => sum + r.gross, 0)
+  const profitTotal = inScope.reduce((sum, r) => sum + r.profit, 0)
   const expensesTotal = inScope.reduce((sum, r) => sum + r.expenses, 0)
   const expectedTotal = grossTotal - expensesTotal
 
@@ -168,16 +169,25 @@ export default function AdminOverviewPage() {
         ) : (
           <>
             <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+              {/* The kita headline is profit: sales minus what the goods cost.
+                  The deposit figures stay on gross — the bank gets money taken,
+                  not margin. */}
               <div>
-                <h2 className="text-[13px] font-medium text-mute">Gross sales</h2>
+                <h2 className="text-[13px] font-medium text-mute">Gross profit</h2>
                 <p className="mt-1 text-[28px] font-semibold leading-none tracking-[-0.01em] tabular-nums text-ink">
-                  {peso.format(grossTotal)}
+                  {peso.format(profitTotal)}
                 </p>
                 <p className="mt-1.5 text-[13px] text-mute">
                   {label} · {scopeLabel}
                 </p>
               </div>
-              <dl className="flex gap-6">
+              <dl className="flex flex-wrap gap-6">
+                <div>
+                  <dt className="text-[12px] text-mute">Gross sales</dt>
+                  <dd className="mt-0.5 text-[15px] font-medium tabular-nums text-ink-soft">
+                    {peso.format(grossTotal)}
+                  </dd>
+                </div>
                 <div>
                   <dt className="text-[12px] text-mute">Expenses</dt>
                   <dd className="mt-0.5 text-[15px] font-medium tabular-nums text-ink-soft">

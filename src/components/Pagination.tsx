@@ -43,7 +43,7 @@ export function Pagination({
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line px-5 py-3">
       <p className="text-[12.5px] tabular-nums text-mute">
-        {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()} {unit}
+        {from.toLocaleString()}-{to.toLocaleString()} of {total.toLocaleString()} {unit}
       </p>
 
       <nav aria-label="Pagination" className="flex items-center gap-1">

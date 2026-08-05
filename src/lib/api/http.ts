@@ -18,6 +18,7 @@ import type {
   NewDeposit,
   NewExpense,
   ProfileInput,
+  ResetPinStatus,
   SignInEvent,
   Store,
 } from "./types"
@@ -37,22 +38,26 @@ export const httpApi: TwzApi = {
   signIn: (identifier, password, remember = false) =>
     send<Session>("POST", "/session", { identifier, password, remember }),
   signOut: () => send<void>("DELETE", "/session"),
-  requestPasswordReset: (identifier) =>
-    send<void>("POST", "/password-resets", { identifier }),
   signIns: (accountId) => get<SignInEvent[]>(`/accounts/${accountId}/sign-ins`),
+
+  setManagerPassword: (managerId, pin, password) =>
+    send<void>("PUT", `/managers/${managerId}/password`, { pin, password }),
+  resetPin: () => get<ResetPinStatus>("/settings/reset-pin"),
+  changeResetPin: (currentPin, newPin) =>
+    send<void>("PUT", "/settings/reset-pin", { currentPin, newPin }),
 
   updateProfile: (input: ProfileInput) =>
     input.photo
       ? upload<Session>(
           "PATCH",
           "/account",
-          { name: input.name, username: input.username, email: input.email },
+          { name: input.name, username: input.username, avatarKind: input.avatarKind },
           { photo: [input.photo] },
         )
       : send<Session>("PATCH", "/account", {
           name: input.name,
           username: input.username,
-          email: input.email,
+          avatarKind: input.avatarKind,
           ...(input.removePhoto ? { removePhoto: true } : {}),
         }),
   changePassword: (current, next) =>

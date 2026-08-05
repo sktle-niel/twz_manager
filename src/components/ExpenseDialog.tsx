@@ -183,7 +183,7 @@ export function ExpenseDialog({
             hint={
               receiptOptional
                 ? "Not required for company-covered categories"
-                : "Up to 5 photos — remove or add as needed"
+                : "Up to 5 photos. Remove or add as needed."
             }
             entries={receipts}
             onChange={setReceipts}

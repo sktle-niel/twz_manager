@@ -44,7 +44,8 @@ export function SignInCard({
                 </div>
                 <p className="mt-0.5 text-[12.5px] leading-[1.5] text-mute">{e.platform}</p>
                 <p className="text-[12.5px] leading-[1.5] text-mute">
-                  <span className="font-mono text-[12px] text-ink-soft">{e.ip}</span> · {e.place}
+                  <span className="font-mono text-[12px] text-ink-soft">{e.ip}</span>
+                  {e.place && ` · ${e.place}`}
                 </p>
                 {/* `at` crosses the wire as an ISO instant, not a Date */}
                 <p className="mt-0.5 text-[12px] text-mute">{timeAgo(new Date(e.at), now)}</p>

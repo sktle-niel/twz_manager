@@ -4,7 +4,7 @@ import { Navigate, useNavigate } from "react-router-dom"
 import gsap from "gsap"
 import { useGSAP } from "@gsap/react"
 import { RISE, STAGGER, prefersReducedMotion } from "../lib/motion"
-import { ApiError, api } from "../lib/api"
+import { ApiError } from "../lib/api"
 import { useAuth } from "../lib/session"
 import { useToast } from "../lib/toast"
 import {
@@ -16,6 +16,7 @@ import {
   ReceiptIcon,
 } from "@phosphor-icons/react"
 import logo from "../assets/twz-logo-light.png"
+import crew from "../assets/twz-crew.webp"
 
 type FieldErrors = { identifier?: string; password?: string; form?: string }
 
@@ -56,10 +57,7 @@ export default function LoginPage() {
 
   function validate(): FieldErrors {
     const next: FieldErrors = {}
-    const id = identifier.trim()
-    if (!id) next.identifier = "Enter your username or Gmail."
-    else if (id.includes("@") && !/^[^\s@]+@gmail\.com$/i.test(id))
-      next.identifier = "That doesn't look like a valid Gmail address."
+    if (!identifier.trim()) next.identifier = "Enter your username."
     if (!password) next.password = "Enter your password."
     else if (password.length < 6) next.password = "Password must be at least 6 characters."
     return next
@@ -90,16 +88,13 @@ export default function LoginPage() {
     }
   }
 
+  /*
+   * There is nowhere to send a reset link — accounts have no email address —
+   * so the honest answer is who to ask. The owner sets a new password from
+   * the Managers page, behind the recovery PIN.
+   */
   function handleForgotPassword() {
-    const id = identifier.trim()
-    if (!id) {
-      setErrors({ identifier: "Enter your username or Gmail first, then tap this again." })
-      return
-    }
-    void api
-      .requestPasswordReset(id)
-      .then(() => showToast("If that account exists, a reset link is on its way."))
-      .catch(() => showToast("That did not go through. Try again."))
+    showToast("Ask the owner to set a new password for you.")
   }
 
   /* Already signed in — there is nothing to do here but leave */
@@ -116,6 +111,24 @@ export default function LoginPage() {
 
   return (
     <main ref={scopeRef} className="relative min-h-[100dvh] lg:grid lg:grid-cols-[1.05fr_1fr]">
+      {/* Mobile: the crew as a faint backdrop behind the card. The card's own
+          surface is opaque, so the art frames the form without touching its
+          legibility; the fixed layer sits under the canvas-level content. */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 lg:hidden">
+        <img
+          src={crew}
+          alt=""
+          draggable={false}
+          className="absolute bottom-0 left-1/2 h-[52vh] w-auto -translate-x-1/2 opacity-[0.09] select-none"
+        />
+      </div>
+
+      {/* Mobile: the copyright rides fixed at the bottom of the page, on a
+          canvas fade so it stays readable over whatever scrolls beneath it */}
+      <footer className="fixed inset-x-0 bottom-0 z-10 bg-gradient-to-t from-canvas via-canvas/85 to-transparent px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-6 text-center lg:hidden">
+        <span className="text-[12.5px] text-mute">© 2021 Two Wheels Zone</span>
+      </footer>
+
       {/* Left — brand panel (compact logo header on mobile) */}
       <section className="relative overflow-hidden lg:flex lg:flex-col lg:justify-between lg:p-14">
         {/* Quiet paper depth: fine dot grid + a soft warm light, desktop only */}
@@ -135,6 +148,22 @@ export default function LoginPage() {
               "radial-gradient(38rem 24rem at 10% -4%, rgba(52,101,56,0.05), transparent 60%)",
           }}
         />
+
+        {/*
+          The crew as the panel's backdrop: the full art stands at the right
+          edge with a canvas wash laid over it, strongest where the copy sits
+          and thinnest where the figures are. The words stay the loudest thing
+          on the panel; the art glows through behind them.
+        */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden lg:block">
+          <img
+            src={crew}
+            alt=""
+            draggable={false}
+            className="absolute bottom-0 right-0 h-[min(80vh,780px)] w-auto select-none"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-canvas via-canvas/70 to-canvas/20" />
+        </div>
 
         <header
           className="relative flex justify-center pt-10 lg:justify-start lg:pt-0"
@@ -178,12 +207,12 @@ export default function LoginPage() {
         </div>
 
         <footer className="relative hidden lg:block" data-rise="brand">
-          <span className="text-[13px] text-mute">© 2026 Two Wheels Zone</span>
+          <span className="text-[13px] text-mute">© 2021 Two Wheels Zone</span>
         </footer>
       </section>
 
       {/* Right — sign-in panel */}
-      <section className="flex items-start justify-center px-4 pb-12 pt-8 lg:min-h-[100dvh] lg:items-center lg:border-l lg:border-line lg:bg-surface lg:px-14 lg:py-0">
+      <section className="flex items-start justify-center px-4 pb-20 pt-8 lg:min-h-[100dvh] lg:items-center lg:border-l lg:border-line lg:bg-surface lg:px-14 lg:py-0">
         <div className="w-full max-w-[24.5rem]">
           {/* Card chrome on mobile only; the form sits bare on the white desktop panel */}
           <div
@@ -196,7 +225,7 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
               <div>
                 <label htmlFor="identifier" className="text-[13px] font-medium text-ink-soft">
-                  Username or Gmail
+                  Username
                 </label>
                 <input
                   id="identifier"
@@ -205,10 +234,9 @@ export default function LoginPage() {
                   autoComplete="username"
                   autoCapitalize="none"
                   autoCorrect="off"
-                  inputMode="email"
                   enterKeyHint="next"
                   spellCheck={false}
-                  placeholder="name@gmail.com"
+                  placeholder="firstname.lastname"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   aria-invalid={Boolean(errors.identifier)}
@@ -309,10 +337,6 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Mobile-only footer (desktop shows it in the left panel) */}
-          <p className="mt-6 text-center text-[12.5px] text-mute lg:hidden" data-rise="form">
-            © 2026 Two Wheels Zone
-          </p>
         </div>
       </section>
     </main>

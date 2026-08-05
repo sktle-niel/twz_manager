@@ -29,6 +29,7 @@ import type {
   NewExpense,
   Owner,
   ProfileInput,
+  ResetPinStatus,
   SignInEvent,
   Store,
 } from "./types"
@@ -61,8 +62,6 @@ export type TwzApi = {
    */
   signIn(identifier: string, password: string, remember?: boolean): Promise<Session>
   signOut(): Promise<void>
-  /** Sends a reset link if the account exists; resolves either way. */
-  requestPasswordReset(identifier: string): Promise<void>
   signIns(accountId: string): Promise<SignInEvent[]>
 
   /* ---- the signed-in account ---- */
@@ -76,7 +75,18 @@ export type TwzApi = {
 
   stores(): Promise<Store[]>
   managers(): Promise<Manager[]>
-  issueManager(input: { name: string; email: string; storeId: string }): Promise<Manager>
+  /**
+   * Issues a branch account. With no email anywhere in the system the owner
+   * sets both halves of the credential: the username, which the manager signs
+   * in with, and the first password, which is handed over in person.
+   * Rejects 422 with `fields.username` when the username is taken.
+   */
+  issueManager(input: {
+    name: string
+    username: string
+    storeId: string
+    password: string
+  }): Promise<Manager>
   /** Reassigning a held branch swaps the two managers, server-side */
   assignBranch(managerId: string, storeId: string): Promise<Manager[]>
 
@@ -105,6 +115,21 @@ export type TwzApi = {
   deposits(storeId: string, range: DayRange): Promise<Deposit[]>
   /** Rejects 409 with a field error on `slip` when the photo already covers a deposit */
   recordDeposit(input: NewDeposit): Promise<Deposit>
+
+  /* ---- recovery (owner only) ---- */
+
+  /**
+   * Sets a manager's password without knowing the old one — the whole point,
+   * since nobody has it. Guarded by the PIN as well as by being the owner, so
+   * a laptop left signed in is not enough to take a branch account.
+   * Rejects 422 with `fields.pin` on a wrong PIN, 429 once it has been wrong
+   * too many times.
+   */
+  setManagerPassword(managerId: string, pin: string, password: string): Promise<void>
+  /** Whether the PIN is still the shipped default, and when it last changed. */
+  resetPin(): Promise<ResetPinStatus>
+  /** Rejects 422 with `fields.currentPin` when the old PIN is wrong. */
+  changeResetPin(currentPin: string, newPin: string): Promise<void>
 
   /* ---- settings ---- */
 

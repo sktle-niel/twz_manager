@@ -309,7 +309,7 @@ export async function inspectSlip(
     return fail(
       "file",
       "The photo could not be opened",
-      "The file may be damaged — take another one.",
+      "The file may be damaged. Take another one.",
     )
   }
 
@@ -320,7 +320,7 @@ export async function inspectSlip(
   if (Math.min(w, h) < MIN_EDGE) {
     return fail(
       "size",
-      `Too small to read — ${size}`,
+      `Too small to read (${size})`,
       `A slip needs at least ${MIN_EDGE} pixels on its short side. Take the photo again rather than cropping one down.`,
     )
   }
@@ -472,7 +472,7 @@ export async function inspectSlip(
   return {
     level: worst,
     headline:
-      worst === "ok" ? `The slip looks valid — ${size}, in focus.` : "Check the photo before recording",
+      worst === "ok" ? `The slip looks valid: ${size}, in focus.` : "Check the photo before recording",
     findings,
     sha,
     phash,
