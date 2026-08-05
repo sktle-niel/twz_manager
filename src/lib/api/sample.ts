@@ -14,10 +14,10 @@
  *
  * It behaves like the backend it stands in for: one identity per session,
  * writes validated and rejected with the same ApiError shape the HTTP adapter
- * throws, latency on every call. The one concession to development comfort is
- * the boot state — you start signed in as the first manager so a reload does
- * not demand credentials every time. Sign out to exercise the login flow;
- * any password at least 6 characters long is accepted for a known account.
+ * throws, latency on every call. Nothing inside is reachable without signing
+ * in — any password of 6+ characters is accepted for a known account. The
+ * signed-in identity is kept in sessionStorage so a reload keeps the session
+ * the way a real cookie would, and closing the tab ends it.
  *
  * Selected by VITE_DATA_SOURCE=sample; see src/lib/api/index.ts.
  */
@@ -113,9 +113,21 @@ const SEED_CATEGORIES: ExpenseCategoryConfig[] = [
 
 let managers = [...SEED_MANAGERS]
 let categories = [...SEED_CATEGORIES]
-/* Booted signed-in for development comfort; sign out to see the login flow */
-let signedIn: Session = { manager: managers[0], owner: null }
 let rules = { batchWindowDays: 3 }
+
+/* The signed-in identity, restored from sessionStorage so a reload behaves
+   like a real session cookie: still signed in within the tab, signed out
+   when the tab closes. Nobody is signed in until the form says so. */
+const SESSION_KEY = "twz-sample-session"
+
+function restoreSession(): Session {
+  const id = sessionStorage.getItem(SESSION_KEY)
+  if (id === owner.id) return { manager: null, owner }
+  const manager = managers.find((m) => m.id === id) ?? null
+  return { manager, owner: null }
+}
+
+let signedIn: Session = restoreSession()
 
 /** Expenses added this session, and ids removed or edited, keyed by store:day */
 const addedExpenses = new Map<string, ExpenseItem[]>()
@@ -443,6 +455,7 @@ export const sampleApi: TwzApi = {
     }
     if (id === owner.username || id === owner.email.toLowerCase()) {
       signedIn = { manager: null, owner }
+      sessionStorage.setItem(SESSION_KEY, owner.id)
       return settle({ ...signedIn })
     }
     const found = managers.find(
@@ -454,11 +467,13 @@ export const sampleApi: TwzApi = {
       })
     }
     signedIn = { manager: found, owner: null }
+    sessionStorage.setItem(SESSION_KEY, found.id)
     return settle({ ...signedIn })
   },
 
   signOut: () => {
     signedIn = { manager: null, owner: null }
+    sessionStorage.removeItem(SESSION_KEY)
     return settle(undefined)
   },
 

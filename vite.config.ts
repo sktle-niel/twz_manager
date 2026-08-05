@@ -10,4 +10,12 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    /* Same-origin /api in development, exactly like production — the Laravel
+       dev server answers behind the proxy and cookies never cross an origin.
+       Run with VITE_DATA_SOURCE unset (or =http) to use it. */
+    proxy: {
+      "/api": "http://localhost:8000",
+    },
+  },
 })
