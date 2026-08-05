@@ -377,7 +377,7 @@ export default function ExpensesPage() {
               hint={
                 receiptOptional
                   ? "Not required for company-covered categories"
-                  : "Add up to 5 — camera or gallery"
+                  : "Add up to 5, camera or gallery"
               }
               entries={receipts}
               onChange={setReceipts}
@@ -496,7 +496,7 @@ export default function ExpensesPage() {
           <div className="border-t border-line px-5 pb-1 pt-4">
             <h2 className="text-[15px] font-semibold text-ink">Not yet deposited</h2>
             <p className="mt-0.5 text-[13px] text-mute">
-              Expenses can still be added to these days. Days with nothing logged are flagged — pick
+              Expenses can still be added to these days. Days with nothing logged are flagged. Pick
               one to log against it.
             </p>
           </div>

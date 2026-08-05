@@ -30,7 +30,7 @@ caller's request, never their authority.
 **Errors.** Non-2xx responses carry:
 
 ```json
-{ "message": "Human-readable, shown to the user verbatim.", "fields": { "email": "That Gmail already has an account." } }
+{ "message": "Human-readable, shown to the user verbatim.", "fields": { "username": "That username is taken." } }
 ```
 
 - `message` is required and user-facing — write it for the branch manager, not
@@ -64,9 +64,13 @@ store.
 
 **Multipart uploads.** One convention everywhere: the non-file fields travel
 as a single part named `payload` containing the same JSON object a bodied
-request would send; each file list becomes repeated parts under its own name.
-Parse `payload` exactly as you would a JSON body. `POST` for creates, `PATCH`
-for updates — the method never changes just because files are attached.
+request would send; each file list becomes repeated parts under its own name
+**with a `[]` suffix** (`receipts[0][]`, `photo[]`) — PHP keeps only the last
+of repeated bare names, so the suffix is what lets every file arrive. Parse
+`payload` exactly as you would a JSON body. Logically `POST` for creates and
+`PATCH` for updates; on the wire a multipart update travels as `POST` with a
+`_method=PATCH` part (Laravel method spoofing), because PHP cannot parse a
+multipart `PATCH` body at all.
 
 **Stored images.** `photoUrl`, `receiptUrls`, `slipUrl` are URLs the backend
 serves, same-origin under the API and authorised by the same session cookie.
@@ -80,13 +84,12 @@ shows a retry. Long-running work should not hide behind a single request.
 per account once signed in and per IP before that — so a branch where three
 managers share one router never has them competing for one allowance. Over the
 line is `429` with the usual `{ message }`, which is written for the manager and
-should be shown verbatim. Two doors are tighter, both to protect something that
+should be shown verbatim. Two doors are tighter, both guarding something that
 costs more than a read: sign-in pauses for a minute after **five failed
-attempts** on the same identifier+IP (successes never count, and one success
-clears the slate), and asking for a password-reset link is capped at **six per
-hour per IP** because it sends mail to an address the caller names. Responses
-carry `X-RateLimit-Limit` and `X-RateLimit-Remaining` if the client ever wants to
-back off early.
+attempts** on the same identifier+IP, and the recovery PIN stops answering for
+fifteen minutes after **five wrong tries** by the same owner. Both count only
+failures, and one success clears the slate. Responses carry `X-RateLimit-Limit`
+and `X-RateLimit-Remaining` if the client ever wants to back off early.
 
 ## Identity
 
@@ -97,7 +100,8 @@ when signed in, both `null` when anonymous (see 401 semantics above).
 
 ### `POST /session`
 Body `{ identifier: string, password: string, remember: boolean }`.
-`identifier` is a username or Gmail address.
+`identifier` is a **username**. Accounts have no email address at all — see
+"No email anywhere" below.
 **200** the new `Session` (and the `Set-Cookie`).
 **401** wrong credentials — `message` for the banner, optional `fields` on
 `identifier`/`password`.
@@ -106,46 +110,48 @@ Body `{ identifier: string, password: string, remember: boolean }`.
 Ends the session, clears the cookie. **204.** The frontend treats sign-out as
 done even if this request is lost — expire abandoned sessions server-side.
 
-### `POST /password-resets`
-Body `{ identifier: string }`. Sends a reset link if the account exists.
-**204 either way** — the response must not reveal whether an account exists.
-A disabled account is treated as no account: it hears the same 204 and gets no
-link, because a reset must not reopen a door the owner closed.
+### No email anywhere
 
-The mailed link points at the frontend, not the API:
-`{FRONTEND_URL}/reset-password?token=…&email=…`. **That page does not exist
-yet** — building it is the remaining half of this flow.
+Nobody signs in with an email, nothing is mailed to one, and `Manager` and
+`Owner` have no `email` field. A forgotten password is fixed by the owner
+(see "Recovery" below), so there is no endpoint an anonymous caller can use to
+start one — which also means there is nothing here to enumerate accounts with.
 
-### `POST /password-resets/redeem`
-Body `{ token: string, email: string, password: string }` — the three values
-the reset page has: two from its own query string, one the user just typed.
-**204** on success.
-**422** `{ message }` with no `fields` when the link is expired, already spent,
-or does not match that address — one answer for all three, so a spent link
-cannot be told apart from a guessed one. Show `message` as a banner with a way
-back to "forgot password".
-**422** with `fields.password` when the new password is under 8 characters.
-
-The token travels in the body rather than the path so it stays out of access
-logs and browser history. It works once and expires 60 minutes after it is
-issued. Redeeming also invalidates any "remember me" cookie still held by
-another device.
+The owner has nobody above them to reset *their* password. That way back is
+`php artisan twz:set-password <username>` over SSH, deliberately outside the
+API: reaching the server is already proof of who you are.
 
 ### `GET /accounts/{accountId}/sign-ins`
 **200** `SignInEvent[]`, newest first, `current: true` on the session making
 the request. A manager may only read their own; the owner may read anyone's.
+`place` may be `""` — the backend does no IP geolocation, and the UI skips an
+empty place rather than render a dangling separator.
 
 ### `PATCH /account`
 Updates whoever is signed in.
-JSON body `{ name, username, email, removePhoto?: true }`, **or** multipart
-(`payload` + one `photo` part) when a new photo is attached — a new photo
-always wins over `removePhoto`.
+JSON body `{ name, username, avatarKind, removePhoto?: true }`, **or**
+multipart (`payload` + one `photo` part) when a new photo is attached — a new
+photo always wins over `removePhoto`.
 **200** the refreshed `Session`. **422** with `fields` on `name` / `username`
-/ `email` (uniqueness of username/email is the backend's check).
+(username uniqueness is the backend's check).
+
+`avatarKind` is `"girl" | "boy"`: which stock avatar the account shows while
+no photo is uploaded. **Girl is the default** for every account that has never
+chosen. `Manager` and `Owner` carry it back in the session payload; a backend
+that omits it is read as `"girl"`.
 
 ### `PUT /account/password`
-Body `{ current: string, next: string }`.
-**204.** Wrong current password → **422** with `fields.current`.
+Body `{ current: string, next: string }`. Both roles change their own password
+here; the current one is the proof of identity, so a device left signed in
+cannot silently re-key the account.
+**204.** Wrong current password → **422** with `fields.current`; a `next` under
+8 characters → **422** with `fields.next`. Success rotates the remember token,
+signing out every remembered device — the session making the change stays.
+
+This is also what retires the owner's seeded password: the backend seeds the
+owner from `OWNER_USERNAME`/`OWNER_PASSWORD` in its `.env` exactly once, and
+after this endpoint has run, the database owns the credential — no reseed
+brings the `.env` value back.
 
 ## Branches and accounts (owner only)
 
@@ -159,10 +165,43 @@ Everything else here is owner-only: enforce `403` for managers.
 **200** `Manager[]`.
 
 ### `POST /managers`
-Body `{ name, email, storeId }`. Issues an account (the backend generates the
-username and the initial credential flow).
-**200** the created `Manager`. **422** `fields.email` when taken,
-`fields.storeId` when the branch already has a manager.
+Body `{ name, username, storeId, password }`. With no email in the system the
+owner sets both halves of the credential and hands them over in person; the
+backend never invents either.
+**200** the created `Manager`. **422** `fields.username` when taken,
+`fields.password` when under 8 characters, `fields.storeId` when the branch
+already has a manager.
+
+### `PUT /managers/{managerId}/password`
+Recovery. Body `{ pin: string, password: string }`. Sets a manager's password
+without the old one — the whole point, since nobody has it.
+**204** on success.
+**422** `fields.pin` on a wrong PIN, `fields.password` when under 8 characters.
+**429** once the PIN has been wrong five times; the message says how long the
+wait is.
+**404** when the account is gone. **422** with a bare `message` when the target
+is the owner — that is the artisan command's job, not this endpoint's.
+
+Two locks, because this hands over an account: being the owner is the first,
+the PIN is the second, so an unattended laptop still signed in is not enough.
+Setting a password also rotates `remember_token`, signing out every device that
+was still holding one.
+
+### `GET /settings/reset-pin`
+**200** `{ isDefault: boolean, length: number, changedAt: string | null }`.
+Never the PIN itself — only a hash is stored, so there is nothing to send.
+`isDefault` is true while it is still the value the app shipped with, including
+the case where somebody set it back to that; the settings page says so out loud,
+because a documented default is not a secret.
+
+### `PUT /settings/reset-pin`
+Body `{ currentPin: string, newPin: string }`. **204.**
+**422** `fields.currentPin` when the old PIN is wrong, `fields.newPin` when the
+new one is not exactly 4 digits. **429** shares the counter above.
+
+The frontend shows the new PIN exactly once after this succeeds and will not
+let the step close until a copy has been saved as an image or a PDF. There is
+no screen that can show it again.
 
 ### `PATCH /managers/{managerId}/branch`
 Body `{ storeId }`. Assigns the branch; if another manager holds it, **swap
@@ -176,12 +215,22 @@ Against Loyverse's request budget this is the difference between a page load
 and an outage — see LOYVERSE.md.
 
 ### `GET /sales/daily?storeIds=…&from=…&to=…`
-**200** `DailySales[]` — one row per requested store per day in range.
-`expected = gross - expenses` (the day's logged expenses).
+**200** `DailySales[]` — one row per requested store per day that has sales;
+a day with none simply has no row.
+
+Two different numbers, on purpose: `gross` is money taken at the till net of
+refunds, and it is what `expected = gross - expenses` reconciles against a
+bank slip. `profit` is gross minus what the goods on the receipts cost the
+shop (Loyverse line-item costs, refunds netted) — the kita figure the
+dashboards headline. Deposits never reconcile against profit; nobody deposits
+a margin.
+
+*Interim:* until the expenses slice is built server-side, `expenses` is `0`
+and `expected` equals `gross`.
 
 ### `GET /sales/hourly?storeIds=…&day=…`
 **200** `HourPoint[]` summed across the requested stores, branch-local hours,
-partial while the day is open.
+partial while the day is open. Hours with no sales have no point.
 
 ## Expenses
 
@@ -228,9 +277,14 @@ icon, deliberately.
 `deposited`, `reference`, and `slipUrl` come from the covering deposit, null
 until one exists.
 
+**The ledger has a start day** (a backend setting, `audit_start_day`): days
+before it were settled in the world before this app existed. They carry no
+audit row and appear in no backlog — but their sales still show in
+`/sales/daily`, so the charts keep their history.
+
 ### `GET /deposits/pending?storeId=…`
 **200** `DayAudit[]` — audited days with no deposit against them, **oldest
-first**, however far back they run.
+first**, starting at the ledger's start day.
 
 ### `GET /deposits?storeId=…&from=…&to=…`
 **200** `Deposit[]` filed in the range (`day` is the deposit date, not the
@@ -279,7 +333,9 @@ backend (see LOYVERSE.md).
 Re-validates the stored token against Loyverse. **204.**
 
 ### `GET /settings/reconciliation`
-**200** `{ batchWindowDays: number }`.
+**200** `{ batchWindowDays: number }`. The one exception to owner-only in
+this section: both roles may READ it — the manager's status card counts the
+deposit backlog against this window. `PATCH` stays owner-only.
 
 ### `PATCH /settings/reconciliation`
 Body `{ batchWindowDays: number }`, an integer 1–14. **204.** This drives the

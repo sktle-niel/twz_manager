@@ -24,34 +24,61 @@ export type Store = {
   name: string
 }
 
+/*
+ * Accounts have no email address. Nobody signs in with one, nothing is mailed
+ * to one, and a forgotten password is fixed by the owner rather than by an
+ * inbox — so the field was one more thing to invent when issuing an account
+ * and nothing ever read it.
+ */
+
+/** Which stock avatar stands in when no photo is uploaded. Girl is the default. */
+export type AvatarKind = "girl" | "boy"
+
 export type Manager = {
   id: string
   name: string
   username: string
-  email: string
   storeId: string
   active: boolean
-  /** Null until a profile photo is uploaded */
+  /** Null until a profile photo is uploaded; the photo always wins over stock */
   photoUrl: string | null
+  /** The account's chosen stock avatar; absent reads as "girl" */
+  avatarKind?: AvatarKind
 }
 
 export type Owner = {
   id: string
   name: string
   username: string
-  email: string
-  /** Null until a profile photo is uploaded */
+  /** Null until a profile photo is uploaded; the photo always wins over stock */
   photoUrl: string | null
+  /** The account's chosen stock avatar; absent reads as "girl" */
+  avatarKind?: AvatarKind
 }
 
 /** Fields an account can change about itself; `photo` uploads a new avatar */
 export type ProfileInput = {
   name: string
   username: string
-  email: string
+  /** Which stock avatar to show while no photo is uploaded */
+  avatarKind: AvatarKind
   photo?: File | null
   /** True removes the stored photo; a new `photo` wins over it */
   removePhoto?: boolean
+}
+
+/**
+ * What the owner may know about the recovery PIN. Never the PIN itself — only
+ * a hash is stored, so there is nothing to send back. `isDefault` is true while
+ * it is still the value the system shipped with, which the settings page says
+ * out loud: a documented default is not a secret.
+ */
+export type ResetPinStatus = {
+  isDefault: boolean
+  /** How many digits the PIN has, so the form does not have to guess */
+  length: number
+  /** ISO 8601 instant, or null while it has never been changed */
+  changedAt: string | null
 }
 
 /** Category names are data now, not a fixed union — the owner edits them */
@@ -108,8 +135,12 @@ export type HourPoint = {
 export type DailySales = {
   storeId: string
   day: DayKey
+  /** Money taken at the till, net of refunds — what a bank deposit must match */
   gross: number
+  /** Gross minus what the goods cost the shop: the kita figure */
+  profit: number
   expenses: number
+  /** gross - expenses; deposits reconcile against money, never margin */
   expected: number
 }
 

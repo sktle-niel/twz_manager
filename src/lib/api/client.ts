@@ -140,8 +140,15 @@ export function upload<T>(
   const form = new FormData()
   form.append("payload", JSON.stringify(payload))
   for (const [key, list] of Object.entries(files)) {
-    list.forEach((file) => form.append(key, file, file.name))
+    /* The [] suffix matters: PHP keeps only the LAST of repeated bare part
+       names, so "receipts" twice arrives as one file. "receipts[]" twice
+       arrives as two. */
+    list.forEach((file) => form.append(`${key}[]`, file, file.name))
   }
+  /* PHP cannot parse a multipart PATCH body at all — only POST. The wire
+     carries POST + _method=PATCH (Laravel's method spoofing), and the
+     contract stays a logical PATCH. */
+  if (method !== "POST") form.append("_method", method)
   // No Content-Type header: the browser must set the multipart boundary itself
-  return request<T>(path, { method, body: form }, UPLOAD_TIMEOUT_MS)
+  return request<T>(path, { method: "POST", body: form }, UPLOAD_TIMEOUT_MS)
 }

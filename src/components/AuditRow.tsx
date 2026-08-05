@@ -145,7 +145,7 @@ export function AuditRow({
           {peso.format(audit.expected)}
         </span>
         <span className="truncate text-right text-[13px] tabular-nums text-mute">
-          {deposited === null ? "—" : peso.format(deposited)}
+          {deposited === null ? "-" : peso.format(deposited)}
         </span>
         <span className="justify-self-end">
           <StatusChip status={audit.status} />

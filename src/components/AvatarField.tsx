@@ -1,25 +1,27 @@
 import { useEffect, useRef, useState } from "react"
 import gsap from "gsap"
 import { useGSAP } from "@gsap/react"
-import { CameraIcon, UserIcon } from "@phosphor-icons/react"
+import { CameraIcon } from "@phosphor-icons/react"
 import { DUR, EASE, prefersReducedMotion } from "../lib/motion"
-import { initials } from "../lib/format"
+import { STOCK_AVATARS, stockAvatar } from "../lib/avatar"
+import type { AvatarKind } from "../lib/api"
 
 /*
- * Optional profile photo. With no file attached the avatar falls back to the
- * account's own initials, drawn one character at a time — keyed on the letters,
- * so editing the name field above replays it and the empty state reads as
- * deliberate rather than as a missing image.
- *
- * The letters carry their own beat rather than reusing useRouteReveal: that
- * hook animates whole [data-rise] sections on navigation, and this needs to
- * replay mid-page whenever the name changes.
+ * The profile picture, in the account's own hands: pick one of the two stock
+ * avatars, or upload a photo. An uploaded photo always wins; removing it
+ * falls back to whichever stock face is chosen. Girl is the default for
+ * every account until its owner says otherwise.
  */
-const MARK_STAGGER = 0.1
+const KIND_LABELS: Record<AvatarKind, string> = {
+  girl: "Girl avatar",
+  boy: "Boy avatar",
+}
 
 export function AvatarField({
   id,
   name,
+  avatarKind,
+  onAvatarKind,
   file,
   existingUrl = null,
   onChange,
@@ -28,6 +30,9 @@ export function AvatarField({
 }: {
   id: string
   name: string
+  /** The stock face shown while no photo is uploaded */
+  avatarKind: AvatarKind
+  onAvatarKind: (kind: AvatarKind) => void
   file: File | null
   /** Photo already stored by the backend, shown until a new file replaces it */
   existingUrl?: string | null
@@ -37,8 +42,7 @@ export function AvatarField({
   hint?: string
 }) {
   const [filePreview, setFilePreview] = useState<string | null>(null)
-  const marksRef = useRef<HTMLSpanElement>(null)
-  const letters = initials(name)
+  const frameRef = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
     if (!file) {
@@ -50,23 +54,23 @@ export function AvatarField({
     return () => URL.revokeObjectURL(url)
   }, [file])
 
-  /* The new file wins over the stored photo; the stored one wins over initials */
-  const preview = filePreview ?? existingUrl
+  /* The new file wins over the stored photo; the stored one wins over stock */
+  const uploaded = filePreview ?? existingUrl
+  const shown = uploaded ?? stockAvatar(avatarKind)
 
+  /* A small settle whenever the picture changes, so a swap reads as deliberate */
   useGSAP(
     () => {
-      const marks = marksRef.current?.querySelectorAll("[data-mark]")
-      if (!marks?.length || prefersReducedMotion()) return
-      gsap.from(marks, {
+      if (!frameRef.current || prefersReducedMotion()) return
+      gsap.from(frameRef.current, {
         opacity: 0,
-        y: 10,
+        scale: 0.92,
         duration: DUR.rise,
         ease: EASE,
-        stagger: MARK_STAGGER,
         clearProps: "opacity,transform",
       })
     },
-    { dependencies: [letters, preview], revertOnUpdate: true },
+    { dependencies: [shown], revertOnUpdate: true },
   )
 
   const actionClass =
@@ -75,33 +79,45 @@ export function AvatarField({
   return (
     <div className="flex items-center gap-4">
       <span
+        ref={frameRef}
         role="img"
-        aria-label={preview ? `${name} profile photo` : `${name}, no photo attached`}
-        className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sage"
+        aria-label={uploaded ? `${name} profile photo` : `${name}, ${KIND_LABELS[avatarKind]}`}
+        className="h-16 w-16 shrink-0 overflow-hidden rounded-full bg-sage ring-1 ring-line"
       >
-        {preview ? (
-          <img src={preview} alt="" className="h-full w-full object-cover" />
-        ) : letters ? (
-          <span
-            ref={marksRef}
-            aria-hidden="true"
-            className="flex text-[20px] font-semibold tracking-[-0.02em] text-sage-ink"
-          >
-            {letters.split("").map((ch, i) => (
-              <span key={`${ch}-${i}`} data-mark className="inline-block">
-                {ch}
-              </span>
-            ))}
-          </span>
-        ) : (
-          <UserIcon size={26} aria-hidden="true" className="text-sage-ink" />
-        )}
+        <img src={shown} alt="" className="h-full w-full object-cover" draggable={false} />
       </span>
 
       <div className="min-w-0">
         <span className="text-[13px] font-medium text-ink-soft">Profile photo</span>
         {hint && <p className="mt-0.5 text-[12.5px] text-mute">{hint}</p>}
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {/* The stock choice, girl first because girl is the default. Hidden
+              while a photo is up: the photo wins, so the choice would be a
+              button that visibly does nothing. */}
+          {!uploaded &&
+            (Object.keys(STOCK_AVATARS) as AvatarKind[]).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => onAvatarKind(kind)}
+                aria-label={KIND_LABELS[kind]}
+                aria-pressed={avatarKind === kind}
+                title={KIND_LABELS[kind]}
+                className={`h-9 w-9 shrink-0 overflow-hidden rounded-full transition-shadow duration-200 ease-quiet ${
+                  avatarKind === kind
+                    ? "ring-2 ring-brand-deep"
+                    : "ring-1 ring-line hover:ring-line-strong"
+                }`}
+              >
+                <img
+                  src={STOCK_AVATARS[kind]}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  draggable={false}
+                />
+              </button>
+            ))}
+
           <input
             id={id}
             type="file"
@@ -114,9 +130,9 @@ export function AvatarField({
             className={`${actionClass} peer-focus-visible:border-brand-deep peer-focus-visible:shadow-[0_0_0_2px_rgba(30,125,27,0.8)]`}
           >
             <CameraIcon size={15} aria-hidden="true" />
-            {preview ? "Replace" : "Add photo"}
+            {uploaded ? "Replace" : "Add photo"}
           </label>
-          {preview && (
+          {uploaded && (
             <button
               type="button"
               onClick={() => {

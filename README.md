@@ -77,9 +77,11 @@ npm run lint
 
 Sample mode starts at the sign-in screen like the real thing — nothing inside is reachable
 without an account. Known accounts are `marvin.deocampo` (Arevalo), `joel.sarabia` (Molo),
-`rhea.villanueva` (Jaro), and **`twz.owner`** for the owner side — any password of 6+ characters
-works, and unknown identifiers are rejected the way a real backend would. The session behaves
-like a session cookie: a reload keeps you signed in, closing the tab ends it.
+`rhea.villanueva` (Jaro), `testaccount` (La Paz), and **`twowheelszone`** for the owner side —
+any password of 6+ characters works, and unknown identifiers are rejected the way a real
+backend would. (Against the real backend the same usernames exist with real passwords; see its
+README.) The session behaves like a session cookie: a reload keeps you signed in, closing the
+tab ends it.
 
 The routes are role-guarded: a manager account lands on `/` and cannot open `/admin`; the owner
 lands on `/admin` and cannot open the manager side; signed out, everything walks you to

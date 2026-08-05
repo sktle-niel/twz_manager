@@ -62,12 +62,14 @@ const STORES: Store[] = [
   { id: "lapaz", name: "La Paz" },
 ]
 
+/* avatarKind is seed data the account holder can change on the Account page;
+   girl is the system default for anyone who has not chosen */
 let owner: Owner = {
   id: "owner",
   name: "Two Wheels Zone",
-  username: "twz.owner",
-  email: "owner@gmail.com",
+  username: "twowheelszone",
   photoUrl: null,
+  avatarKind: "girl",
 }
 
 const SEED_MANAGERS: Manager[] = [
@@ -75,28 +77,37 @@ const SEED_MANAGERS: Manager[] = [
     id: "m-arevalo",
     name: "Marvin Deocampo",
     username: "marvin.deocampo",
-    email: "marvin.deocampo@gmail.com",
     storeId: "arevalo",
     active: true,
     photoUrl: null,
+    avatarKind: "boy",
   },
   {
     id: "m-molo",
     name: "Joel Sarabia",
     username: "joel.sarabia",
-    email: "joel.sarabia@gmail.com",
     storeId: "molo",
     active: true,
     photoUrl: null,
+    avatarKind: "boy",
   },
   {
     id: "m-jaro",
     name: "Rhea Villanueva",
     username: "rhea.villanueva",
-    email: "rhea.villanueva@gmail.com",
     storeId: "jaro",
     active: true,
     photoUrl: null,
+    avatarKind: "girl",
+  },
+  {
+    id: "m-lapaz",
+    name: "Test Account",
+    username: "testaccount",
+    storeId: "lapaz",
+    active: true,
+    photoUrl: null,
+    avatarKind: "girl",
   },
 ]
 
@@ -128,6 +139,19 @@ function restoreSession(): Session {
 }
 
 let signedIn: Session = restoreSession()
+
+/* The recovery PIN, mirroring the backend: the shipped 8017 until the owner
+   changes it. The real one lives hashed in a settings table and is only ever
+   compared against; here it sits in memory, which is as close as a mock gets
+   and still refuses to hand itself back to the caller. */
+const SHIPPED_PIN = "8017"
+let resetPin = SHIPPED_PIN
+let pinChangedAt: string | null = null
+
+/* Passwords the owner has set from the admin side. Sample mode accepts any
+   password of 6+ characters for a known account, so this only has to remember
+   that a reset happened — enough to show the flow working end to end. */
+const resetPasswords = new Map<string, string>()
 
 /** Expenses added this session, and ids removed or edited, keyed by store:day */
 const addedExpenses = new Map<string, ExpenseItem[]>()
@@ -453,14 +477,13 @@ export const sampleApi: TwzApi = {
         password: "That password is not right.",
       })
     }
-    if (id === owner.username || id === owner.email.toLowerCase()) {
+    if (id === owner.username) {
       signedIn = { manager: null, owner }
       sessionStorage.setItem(SESSION_KEY, owner.id)
       return settle({ ...signedIn })
     }
-    const found = managers.find(
-      (m) => m.username.toLowerCase() === id || m.email.toLowerCase() === id,
-    )
+    // Username only — accounts have no email to sign in with
+    const found = managers.find((m) => m.username.toLowerCase() === id)
     if (!found) {
       return fail(401, "That username and password do not match.", {
         identifier: "No account matches this.",
@@ -477,19 +500,52 @@ export const sampleApi: TwzApi = {
     return settle(undefined)
   },
 
-  requestPasswordReset: () => settle(undefined),
-
   signIns: (accountId) => settle(signInLog(accountId)),
+
+  setManagerPassword: (managerId, pin, password) => {
+    if (pin !== resetPin) {
+      return fail(422, "Check the highlighted fields.", { pin: "That is not the PIN." })
+    }
+    if (password.length < 8) {
+      return fail(422, "Check the highlighted fields.", {
+        password: "Password must be at least 8 characters.",
+      })
+    }
+    const target = managers.find((m) => m.id === managerId)
+    if (!target) return fail(404, "That account is no longer there.")
+    resetPasswords.set(target.id, password)
+    return settle(undefined)
+  },
+
+  resetPin: () =>
+    settle({
+      isDefault: resetPin === SHIPPED_PIN,
+      length: 4,
+      changedAt: pinChangedAt,
+    }),
+
+  changeResetPin: (currentPin, newPin) => {
+    if (currentPin !== resetPin) {
+      return fail(422, "Check the highlighted fields.", {
+        currentPin: "That is not the current PIN.",
+      })
+    }
+    if (!/^\d{4}$/.test(newPin)) {
+      return fail(422, "Check the highlighted fields.", {
+        newPin: "The PIN must be exactly 4 digits.",
+      })
+    }
+    resetPin = newPin
+    pinChangedAt = new Date().toISOString()
+    return settle(undefined)
+  },
 
   updateProfile: (input) => {
     const name = input.name.trim()
     const username = input.username.trim()
-    const email = input.email.trim()
     const fields: Record<string, string> = {}
     if (!name) fields.name = "Enter the full name."
     if (!username) fields.username = "Enter a username."
-    if (!/^[^\s@]+@gmail\.com$/i.test(email))
-      fields.email = "That doesn't look like a valid Gmail address."
     if (Object.keys(fields).length > 0) return fail(422, "Check the highlighted fields.", fields)
 
     const photoUrl = input.photo
@@ -499,11 +555,17 @@ export const sampleApi: TwzApi = {
         : (signedIn.manager?.photoUrl ?? signedIn.owner?.photoUrl ?? null)
 
     if (signedIn.manager) {
-      const updated = { ...signedIn.manager, name, username, email, photoUrl }
+      const updated = {
+        ...signedIn.manager,
+        name,
+        username,
+        photoUrl,
+        avatarKind: input.avatarKind,
+      }
       managers = managers.map((m) => (m.id === updated.id ? updated : m))
       signedIn = { manager: updated, owner: null }
     } else if (signedIn.owner) {
-      owner = { ...owner, name, username, email, photoUrl }
+      owner = { ...owner, name, username, photoUrl, avatarKind: input.avatarKind }
       signedIn = { manager: null, owner }
     } else {
       return fail(401, "Your session has expired. Sign in again.")
@@ -517,9 +579,9 @@ export const sampleApi: TwzApi = {
         current: "Enter your current password.",
       })
     }
-    if (next.length < 6) {
+    if (next.length < 8) {
       return fail(422, "Check the highlighted fields.", {
-        next: "Password must be at least 6 characters.",
+        next: "Password must be at least 8 characters.",
       })
     }
     return settle(undefined)
@@ -529,18 +591,21 @@ export const sampleApi: TwzApi = {
   managers: () => settle([...managers]),
 
   issueManager: (input) => {
-    const email = input.email.trim().toLowerCase()
-    if (managers.some((m) => m.email.toLowerCase() === email)) {
-      return fail(422, "Check the highlighted fields.", {
-        email: "That Gmail already has an account.",
-      })
-    }
-    const username = input.name.trim().toLowerCase().replace(/\s+/g, ".")
+    const username = input.username.trim().toLowerCase()
+    const fields: Record<string, string> = {}
+    if (!input.name.trim()) fields.name = "Enter the manager's full name."
+    if (!username) fields.username = "Enter a username."
+    else if (!/^[a-z0-9._-]+$/.test(username))
+      fields.username = "Letters, numbers, dots, dashes and underscores only."
+    else if (username === owner.username || managers.some((m) => m.username.toLowerCase() === username))
+      fields.username = "That username is taken."
+    if (input.password.length < 8) fields.password = "Password must be at least 8 characters."
+    if (Object.keys(fields).length > 0) return fail(422, "Check the highlighted fields.", fields)
+
     const created: Manager = {
       id: `m-${Date.now().toString(36)}`,
       name: input.name.trim(),
       username,
-      email: input.email.trim(),
       storeId: input.storeId,
       active: true,
       photoUrl: null,
@@ -575,7 +640,17 @@ export const sampleApi: TwzApi = {
       for (const day of eachDay(range)) {
         const gross = grossFor(storeId, day)
         const expenses = expenseTotal(storeId, day)
-        rows.push({ storeId, day, gross, expenses, expected: gross - expenses })
+        /* Parts margin in the low thirties, wobbling per day like the real
+           ledger does — profit is gross minus what the goods cost */
+        const margin = 0.3 + ((day.charCodeAt(8) + day.charCodeAt(9)) % 7) / 100
+        rows.push({
+          storeId,
+          day,
+          gross,
+          profit: Math.round(gross * margin * 100) / 100,
+          expenses,
+          expected: gross - expenses,
+        })
       }
     }
     return settle(rows)

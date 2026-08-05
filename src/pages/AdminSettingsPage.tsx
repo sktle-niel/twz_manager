@@ -2,19 +2,23 @@ import { useState } from "react"
 import type { ReactNode, SubmitEvent } from "react"
 import {
   CheckCircleIcon,
+  DownloadSimpleIcon,
+  KeyIcon,
   PlugsConnectedIcon,
   PlusIcon,
   ShieldCheckIcon,
   StorefrontIcon,
   TagIcon,
+  WarningCircleIcon,
 } from "@phosphor-icons/react"
 import type { Icon } from "@phosphor-icons/react"
 import { ApiError, api } from "../lib/api"
 import type { ExpenseCategoryConfig } from "../lib/api"
 import { useApi } from "../lib/useApi"
 import { useOwnerSession } from "../lib/session"
-import { inputBad, inputFlush, inputOk } from "../components/ui"
+import { FormField, inputBad, inputBase, inputFlush, inputOk } from "../components/ui"
 import { RowMenu } from "../components/RowMenu"
+import { savePinAsImage, savePinAsPdf } from "../lib/pinCard"
 import { useToast } from "../lib/toast"
 
 function SettingCard({
@@ -53,6 +57,196 @@ function SettingCard({
  * else points at a particular name.
  */
 type Category = ExpenseCategoryConfig
+
+type PinErrors = { currentPin?: string; newPin?: string; confirmPin?: string; form?: string }
+
+/*
+ * The PIN that guards setting somebody else's password.
+ *
+ * Only a hash is stored, so a changed PIN can never be looked up again — which
+ * makes the moment right after a change the only chance anyone has to keep it.
+ * The step refuses to close until the owner has actually saved a copy, because
+ * "I'll remember it" is how a shop ends up locked out of its own accounts.
+ */
+function RecoveryPinCard() {
+  const { showToast } = useToast()
+  const status = useApi(() => api.resetPin(), [])
+
+  const [currentPin, setCurrentPin] = useState("")
+  const [newPin, setNewPin] = useState("")
+  const [confirmPin, setConfirmPin] = useState("")
+  const [errors, setErrors] = useState<PinErrors>({})
+  const [saving, setSaving] = useState(false)
+
+  /* Set once the change lands, and the only place the new PIN is ever shown */
+  const [issued, setIssued] = useState<string | null>(null)
+  const [kept, setKept] = useState(false)
+
+  async function submit(e: SubmitEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const next: PinErrors = {}
+    if (!currentPin.trim()) next.currentPin = "Enter the current PIN."
+    if (!/^\d{4}$/.test(newPin)) next.newPin = "The PIN must be exactly 4 digits."
+    if (confirmPin !== newPin) next.confirmPin = "These two do not match."
+    setErrors(next)
+    if (Object.keys(next).length > 0) return
+
+    setSaving(true)
+    try {
+      await api.changeResetPin(currentPin.trim(), newPin)
+      setIssued(newPin)
+      setKept(false)
+      setCurrentPin("")
+      setNewPin("")
+      setConfirmPin("")
+      setErrors({})
+      status.reload()
+    } catch (err) {
+      if (err instanceof ApiError) setErrors(err.fields ?? { form: err.message })
+      else setErrors({ form: "That did not go through. Try again." })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function keepAsImage() {
+    if (!issued) return
+    try {
+      await savePinAsImage(issued)
+      setKept(true)
+    } catch {
+      showToast("The image could not be saved. Try the PDF instead.")
+    }
+  }
+
+  function keepAsPdf() {
+    if (!issued) return
+    savePinAsPdf(issued)
+    setKept(true)
+  }
+
+  return (
+    <SettingCard
+      icon={KeyIcon}
+      title="Recovery PIN"
+      subtitle="Typed when you set a manager's password. A signed-in owner alone is not enough."
+    >
+      {issued ? (
+        <div className="rounded-lg border border-line bg-canvas px-4 py-4">
+          <p className="text-[13px] font-medium text-ink-soft">Your new PIN</p>
+          <p className="mt-2 font-mono text-[40px] font-bold tracking-[0.3em] text-ink">{issued}</p>
+          <p className="mt-2 text-[13px] text-claret">
+            This is the only time it is shown. Only a hash is kept, so it cannot be looked up again.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void keepAsImage()}
+              className="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+            >
+              <DownloadSimpleIcon size={15} weight="bold" aria-hidden="true" />
+              Save as image
+            </button>
+            <button
+              type="button"
+              onClick={keepAsPdf}
+              className="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+            >
+              <DownloadSimpleIcon size={15} weight="bold" aria-hidden="true" />
+              Save as PDF
+            </button>
+          </div>
+          <button
+            type="button"
+            disabled={!kept}
+            onClick={() => {
+              setIssued(null)
+              showToast("Recovery PIN changed.")
+            }}
+            className="mt-4 flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
+          >
+            {kept ? "Done" : "Save a copy first"}
+          </button>
+        </div>
+      ) : (
+        <>
+          {status.data?.isDefault && (
+            <p className="flex items-start gap-2 rounded-lg border border-claret/40 bg-claret/[0.04] px-3.5 py-2.5 text-[13px] leading-[1.5] text-claret">
+              <WarningCircleIcon size={16} weight="bold" className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span>
+                This is still the PIN the app shipped with, which is written down in the setup notes.
+                Change it before anyone else has an account.
+              </span>
+            </p>
+          )}
+          {status.data && !status.data.isDefault && status.data.changedAt && (
+            <p className="rounded-lg border border-line px-3.5 py-2.5 text-[13px] text-mute">
+              Last changed {new Date(status.data.changedAt).toLocaleDateString()}.
+            </p>
+          )}
+
+          <form onSubmit={submit} noValidate className="mt-3 space-y-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <FormField id="pin-current" label="Current PIN" error={errors.currentPin}>
+                <input
+                  id="pin-current"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="4 digits"
+                  value={currentPin}
+                  onChange={(e) => setCurrentPin(e.target.value)}
+                  aria-invalid={Boolean(errors.currentPin)}
+                  className={`${inputBase} ${errors.currentPin ? inputBad : inputOk}`}
+                />
+              </FormField>
+              <FormField id="pin-new" label="New PIN" error={errors.newPin}>
+                <input
+                  id="pin-new"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={4}
+                  placeholder="4 digits"
+                  value={newPin}
+                  onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
+                  aria-invalid={Boolean(errors.newPin)}
+                  className={`${inputBase} ${errors.newPin ? inputBad : inputOk}`}
+                />
+              </FormField>
+              <FormField id="pin-confirm" label="Type it again" error={errors.confirmPin}>
+                <input
+                  id="pin-confirm"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={4}
+                  placeholder="The same 4 digits"
+                  value={confirmPin}
+                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
+                  aria-invalid={Boolean(errors.confirmPin)}
+                  className={`${inputBase} ${errors.confirmPin ? inputBad : inputOk}`}
+                />
+              </FormField>
+            </div>
+            {errors.form && (
+              <p role="alert" className="text-[13px] text-claret">
+                {errors.form}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
+            >
+              {saving ? "Changing" : "Change PIN"}
+            </button>
+          </form>
+        </>
+      )}
+    </SettingCard>
+  )
+}
 
 export default function AdminSettingsPage() {
   const { showToast } = useToast()
@@ -221,7 +415,7 @@ export default function AdminSettingsPage() {
             <p className="mt-1.5 text-[12.5px] text-mute">
               {pos.error
                 ? "The connection status could not load."
-                : `${pos.data?.storesLinked ?? 0} of ${stores.length} branches synced · token ending ${pos.data?.tokenHint ?? "—"}`}
+                : `${pos.data?.storesLinked ?? 0} of ${stores.length} branches synced${pos.data?.tokenHint ? ` · token ending ${pos.data.tokenHint}` : ""}`}
             </p>
           </div>
           <button
@@ -333,7 +527,7 @@ export default function AdminSettingsPage() {
           ))}
         </ul>
         <p className="mt-2 text-[12.5px] text-mute">
-          Ticked categories are company-covered — the manager logs them with no proof attached, the
+          Ticked categories are company-covered: the manager logs them with no proof attached, the
           way meals and merienda work. Everything else requires a receipt photo.
         </p>
 
@@ -379,7 +573,7 @@ export default function AdminSettingsPage() {
               Require a discrepancy form on mismatch
             </p>
             <p className="mt-0.5 text-[12.5px] text-mute">
-              A mismatched deposit can never be closed silently — the reason and a receipt are always
+              A mismatched deposit can never be closed silently. The reason and a receipt are always
               required.
             </p>
           </div>
@@ -416,6 +610,8 @@ export default function AdminSettingsPage() {
           </div>
         </form>
         </SettingCard>
+
+        <RecoveryPinCard />
       </div>
     </>
   )

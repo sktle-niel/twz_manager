@@ -224,7 +224,7 @@ export default function DepositsPage() {
 
     if (mismatchCents !== 0 && reason.trim().length < REASON_MIN) {
       next.reason = reason.trim()
-        ? `Say a little more — at least ${REASON_MIN} characters.`
+        ? `Say a little more: at least ${REASON_MIN} characters.`
         : `Explain the ${peso.format(mismatchAbs)} difference before recording this.`
     }
     return next
@@ -296,7 +296,7 @@ export default function DepositsPage() {
     showToast(
       shortfallCents === 0
         ? `${peso.format(value)} recorded · ${covers.replace(/^Covers /, "covers ")}.`
-        : `Recorded with a discrepancy — ${peso.format(Math.abs(shortfallCents) / 100)} ${shortfallCents > 0 ? "over" : "short"}.`,
+        : `Recorded with a discrepancy: ${peso.format(Math.abs(shortfallCents) / 100)} ${shortfallCents > 0 ? "over" : "short"}.`,
     )
   }
 
@@ -330,7 +330,7 @@ export default function DepositsPage() {
           {pendingDays.length > batchWindowDays && (
             <p className="mt-1.5 flex items-center gap-1.5 text-[13px] text-claret">
               <WarningCircleIcon size={15} weight="fill" aria-hidden="true" />
-              {pendingDays.length} days waiting — deposits are usually made every{" "}
+              {pendingDays.length} days waiting. Deposits are usually made every{" "}
               {batchWindowDays} days.
             </p>
           )}
@@ -409,7 +409,7 @@ export default function DepositsPage() {
             <FormField
               id="deposit-amount"
               label="Amount deposited"
-              hint={fromSlip.amount ? "Read from the slip — check it." : undefined}
+              hint={fromSlip.amount ? "Read from the slip. Check it." : undefined}
               error={errors.amount}
             >
               <div className="relative">
@@ -483,7 +483,7 @@ export default function DepositsPage() {
             label="Reference number"
             hint={
               fromSlip.reference
-                ? "Read from the slip — check it."
+                ? "Read from the slip. Check it."
                 : "The transaction or slip number from the bank."
             }
             error={errors.reference}
@@ -589,7 +589,7 @@ export default function DepositsPage() {
                       slipFields.date === null ? (
                       <p className="text-[12.5px] leading-[1.5] text-ink-soft">
                         <span className="font-medium">No printed figures found.</span> The
-                        handwritten parts cannot be read — type them in yourself.
+                        handwritten parts cannot be read. Type them in yourself.
                       </p>
                     ) : (
                       <>
@@ -615,7 +615,7 @@ export default function DepositsPage() {
                           ))}
                         </dl>
                         <p className="mt-2 text-[12px] leading-[1.5] text-mute">
-                          Check these against the slip before recording — the reading can be wrong.
+                          Check these against the slip before recording. The reading can be wrong.
                         </p>
                       </>
                     )}
@@ -643,7 +643,7 @@ export default function DepositsPage() {
             <div className="rounded-lg border border-claret/40 bg-claret/[0.03] p-4">
               <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-claret">
                 <WarningCircleIcon size={16} weight="fill" aria-hidden="true" />
-                Discrepancy — {peso.format(mismatchAbs)} {mismatchCents > 0 ? "over" : "short"}
+                Discrepancy: {peso.format(mismatchAbs)} {mismatchCents > 0 ? "over" : "short"}
               </h3>
               <p className="mt-1 text-[12.5px] leading-[1.5] text-ink-soft">
                 {peso.format(selectedTotal)} was expected for{" "}
@@ -686,7 +686,7 @@ export default function DepositsPage() {
                 <ReceiptUploader
                   inputId="deposit-proof"
                   label="Supporting receipts (optional)"
-                  hint="Anything that backs up the explanation — a meal receipt, a parts invoice."
+                  hint="Anything that backs up the explanation: a meal receipt, a parts invoice."
                   entries={proof}
                   onChange={setProof}
                 />

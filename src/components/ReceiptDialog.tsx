@@ -48,7 +48,7 @@ export function ReceiptDialog({
   const rows: { label: string; value: string; tone?: "bad" }[] = [
     { label: "Branch", value: branchName },
     { label: "Audited day", value: rowDate(date) },
-    { label: "Reference no.", value: audit.reference ?? "—" },
+    { label: "Reference no.", value: audit.reference ?? "None yet" },
     { label: "Expected deposit", value: peso.format(audit.expected) },
     { label: "Amount deposited", value: peso.format(audit.deposited ?? 0) },
   ]

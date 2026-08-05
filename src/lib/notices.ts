@@ -107,7 +107,7 @@ export async function branchNotices({
         ? `${pending.length} days waiting for deposit`
         : `${pending.length} day${pending.length === 1 ? "" : "s"} ready to deposit`,
       detail: late
-        ? `${peso.format(due)} due since ${since} — past the usual ${batchWindowDays}-day window.`
+        ? `${peso.format(due)} due since ${since}, past the usual ${batchWindowDays}-day window.`
         : `${peso.format(due)} due since ${since}.`,
       to: "/deposits",
       action: "Record deposit",
@@ -139,7 +139,7 @@ export async function branchNotices({
     title: lastHour ? `Sales synced through ${hourLabel(lastHour.hour)}` : "No sales synced yet today",
     detail: lastHour
       ? "Loyverse POS is the source for this branch's sales."
-      : "The branch opens at 8 AM — sales start arriving from there.",
+      : "The branch opens at 8 AM. Sales start arriving from there.",
   })
 
   // A sign-in from a device other than this one, with where it came from
@@ -149,7 +149,9 @@ export async function branchNotices({
       id: "new-device",
       tone: "info",
       title: `Signed in on ${other.device}`,
-      detail: `${other.ip} · ${other.place} · ${timeAgo(new Date(other.at), now)}`,
+      detail: [other.ip, other.place, timeAgo(new Date(other.at), now)]
+        .filter(Boolean)
+        .join(" · "),
       to: "/account",
       action: "See every sign-in",
     })
