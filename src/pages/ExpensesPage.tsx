@@ -14,6 +14,7 @@ import { ReceiptUploader } from "../components/ReceiptUploader"
 import type { ReceiptEntry } from "../lib/receipts"
 import { RowMenu } from "../components/RowMenu"
 import { ExpenseDialog } from "../components/ExpenseDialog"
+import { Loading } from "../components/Loading"
 import { useToast } from "../lib/toast"
 
 type FieldErrors = { amount?: string; receipt?: string }
@@ -478,7 +479,7 @@ export default function ExpensesPage() {
             />
           ) : items.length === 0 ? (
             <p className="px-5 pb-6 pt-2 text-[13.5px] text-mute">
-              {expenses.loading ? "Loading…" : "No expenses logged for this day yet."}
+              {expenses.loading ? <Loading /> : "No expenses logged for this day yet."}
             </p>
           ) : (
             <ul className="mt-1 divide-y divide-line">

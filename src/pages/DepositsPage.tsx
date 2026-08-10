@@ -13,6 +13,7 @@ import {
   inputBase,
   inputOk,
 } from "../components/ui"
+import { Loading } from "../components/Loading"
 import { ReceiptUploader } from "../components/ReceiptUploader"
 import { SlipCamera } from "../components/SlipCamera"
 import type { ReceiptEntry } from "../lib/receipts"
@@ -89,6 +90,9 @@ export default function DepositsPage() {
   const [proof, setProof] = useState<ReceiptEntry[]>([])
   const [errors, setErrors] = useState<FieldErrors>({})
   const [saving, setSaving] = useState(false)
+  /* Days about to be deposited with nothing logged against them — held here
+     while the warning modal asks whether that is really true */
+  const [confirmBareDays, setConfirmBareDays] = useState<string[] | null>(null)
 
   const today = new Date()
 
@@ -96,6 +100,7 @@ export default function DepositsPage() {
   const pending = useApi(() => api.pendingDeposits(storeId), [storeId])
   const pendingAudits = pending.data ?? []
   const expectedByDay = new Map(pendingAudits.map((a) => [a.day, a.expected]))
+  const expensesByDay = new Map(pendingAudits.map((a) => [a.day, a.expenses]))
   const pendingDays = pendingAudits.map((a) => fromDayKey(a.day))
 
   /* The owner sets how many days may batch into one deposit; 3 until it loads */
@@ -236,6 +241,21 @@ export default function DepositsPage() {
     setErrors(next)
     if (Object.keys(next).length > 0) return
 
+    /* A covered day with nothing logged is usually a day someone forgot:
+       expenses lower the expected deposit, and a deposited day is final.
+       The warning modal asks once; recording proceeds only on approval. */
+    const bare = selectedDays
+      .map((d) => dayKey(d))
+      .filter((day) => (expensesByDay.get(day) ?? 0) === 0)
+    if (bare.length > 0) {
+      setConfirmBareDays(bare)
+      return
+    }
+
+    await submitDeposit()
+  }
+
+  async function submitDeposit() {
     setSaving(true)
     // To the centavo, never to the peso — the amount must echo the slip exactly
     const value = cents(Number(amount.replace(/,/g, ""))) / 100
@@ -350,9 +370,11 @@ export default function DepositsPage() {
           </p>
         ) : pendingDays.length === 0 ? (
           <p className="px-5 pb-5 pt-2 text-[13.5px] text-mute">
-            {pending.loading
-              ? "Loading…"
-              : "All audited days are covered. Today is still open and will show here once the day is closed."}
+            {pending.loading ? (
+              <Loading />
+            ) : (
+              "All audited days are covered. Today is still open and will show here once the day is closed."
+            )}
           </p>
         ) : (
           <>
@@ -728,7 +750,7 @@ export default function DepositsPage() {
           </p>
         ) : recorded.length === 0 ? (
           <p className="px-5 pb-5 pt-2 text-[13.5px] text-mute">
-            {history.loading ? "Loading…" : "Deposits recorded here will show up in this list."}
+            {history.loading ? <Loading /> : "Deposits recorded here will show up in this list."}
           </p>
         ) : (
         <ul className="mt-1 divide-y divide-line">
@@ -765,6 +787,62 @@ export default function DepositsPage() {
           }}
           onClose={() => setCameraOpen(false)}
         />
+      )}
+
+      {/* The last look before a day is sealed: no expenses on a covered day
+          is usually a day someone forgot to log, and a deposited day can no
+          longer be edited */}
+      {confirmBareDays !== null && (
+        <div
+          className="fixed inset-0 z-40 flex items-end justify-center bg-ink/25 p-4 sm:items-center"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="bare-days-title"
+        >
+          <div className="w-full max-w-md rounded-xl border border-line bg-surface p-5 sm:p-6">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-claret/[0.07] text-claret">
+                <WarningCircleIcon size={20} weight="bold" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <h2 id="bare-days-title" className="text-[16px] font-semibold text-ink">
+                  {confirmBareDays.length === 1
+                    ? "One day has no expenses logged"
+                    : `${confirmBareDays.length} days have no expenses logged`}
+                </h2>
+                <p className="mt-1 text-[13.5px] leading-[1.55] text-ink-soft">
+                  {confirmBareDays.map((day) => rowDate(fromDayKey(day))).join(", ")} — nothing is
+                  logged against {confirmBareDays.length === 1 ? "this day" : "these days"}. Expenses
+                  are deducted from the expected deposit, and once a day is deposited its figures
+                  are final.
+                </p>
+                <p className="mt-2 text-[13.5px] font-medium text-ink">
+                  Are you sure {confirmBareDays.length === 1 ? "this day" : "these days"} had no
+                  expenses at all?
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmBareDays(null)}
+                className="flex h-11 items-center justify-center rounded-lg border border-line-strong px-5 text-[14px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+              >
+                Go back and log expenses
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmBareDays(null)
+                  void submitDeposit()
+                }}
+                className="flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985]"
+              >
+                No expenses, record it
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

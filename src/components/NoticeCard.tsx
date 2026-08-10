@@ -7,6 +7,7 @@
 import { Link } from "react-router-dom"
 import { ArrowRightIcon, CheckCircleIcon, InfoIcon, WarningCircleIcon } from "@phosphor-icons/react"
 import type { Icon } from "@phosphor-icons/react"
+import { Loading } from "./Loading"
 import type { Notice, NoticeTone } from "../lib/notices"
 
 const TONE: Record<NoticeTone, { icon: Icon; className: string }> = {
@@ -78,7 +79,7 @@ export function NoticeCard({
           </li>
         ) : notices.length === 0 ? (
           <li className="px-5 py-6 text-center text-[13.5px] text-mute">
-            {loading ? "Loading…" : "Nothing needs attention right now."}
+            {loading ? <Loading /> : "Nothing needs attention right now."}
           </li>
         ) : (
           notices.map((n) => (

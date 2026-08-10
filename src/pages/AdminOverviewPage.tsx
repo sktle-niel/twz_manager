@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { StorefrontIcon } from "@phosphor-icons/react"
 import { hourLabel, peso, rowDate, shortDate } from "../lib/format"
 import { FilterSelect } from "../components/ui"
+import { Loading } from "../components/Loading"
 import { DateRangePicker } from "../components/DateRangePicker"
 import { SalesChart } from "../components/SalesChart"
 import type { SalesPoint } from "../components/SalesChart"
@@ -52,17 +53,20 @@ export default function AdminOverviewPage() {
 
   const rows = sales.data ?? []
   const inScope = rows.filter((r) => storeIds.includes(r.storeId))
+  /* Every figure on the page is PROFIT — the kita. Gross sales stays on the
+     wire but never on screen. */
   const perDay = new Map<string, number>()
-  for (const r of inScope) perDay.set(r.day, (perDay.get(r.day) ?? 0) + r.gross)
+  for (const r of inScope) perDay.set(r.day, (perDay.get(r.day) ?? 0) + r.profit)
 
   const chartData: SalesPoint[] = singleDay
     ? (hourly.data ?? []).map((p) => ({ label: hourLabel(p.hour), amount: p.amount }))
     : days.map((d) => ({ label: shortDate(d), amount: perDay.get(dayKey(d)) ?? 0 }))
 
-  const grossTotal = inScope.reduce((sum, r) => sum + r.gross, 0)
   const profitTotal = inScope.reduce((sum, r) => sum + r.profit, 0)
   const expensesTotal = inScope.reduce((sum, r) => sum + r.expenses, 0)
-  const expectedTotal = grossTotal - expensesTotal
+  /* House rule: the bank gets profit minus the day's spend; the capital
+     share of the takings stays in the shop to restock */
+  const expectedTotal = profitTotal - expensesTotal
 
   const label = rangeLabel(range, today)
 
@@ -73,7 +77,7 @@ export default function AdminOverviewPage() {
         return {
           key: s.id,
           label: s.name,
-          gross: mine.reduce((sum, r) => sum + r.gross, 0),
+          profit: mine.reduce((sum, r) => sum + r.profit, 0),
           expenses: mine.reduce((sum, r) => sum + r.expenses, 0),
         }
       })
@@ -82,7 +86,7 @@ export default function AdminOverviewPage() {
         return {
           key: dayKey(d),
           label: sameDay(d, today) ? `Today, ${shortDate(d)}` : rowDate(d),
-          gross: row?.gross ?? 0,
+          profit: row?.profit ?? 0,
           expenses: row?.expenses ?? 0,
         }
       })
@@ -94,8 +98,8 @@ export default function AdminOverviewPage() {
   const firstColHeader = allBranches ? "Branch" : "Date"
   const tableTitle = allBranches ? "By branch" : `${scopeLabel} branch`
   const tableSubtitle = allBranches
-    ? "Gross sales, expenses, and expected deposit per branch."
-    : "Gross sales, expenses, and expected deposit per day."
+    ? "Gross profit, expenses, and expected deposit per branch."
+    : "Gross profit, expenses, and expected deposit per day."
 
   /*
    * The rail ranks every branch regardless of the branch filter — comparing
@@ -105,7 +109,7 @@ export default function AdminOverviewPage() {
     .map((s) => ({
       id: s.id,
       name: s.name,
-      amount: rows.filter((r) => r.storeId === s.id).reduce((sum, r) => sum + r.gross, 0),
+      amount: rows.filter((r) => r.storeId === s.id).reduce((sum, r) => sum + r.profit, 0),
     }))
     .sort((a, b) => b.amount - a.amount)
   const branchSalesTotal = branchSales.reduce((sum, r) => sum + r.amount, 0)
@@ -138,7 +142,7 @@ export default function AdminOverviewPage() {
         <DateRangePicker value={range} onChange={setRange} today={today} />
       </div>
 
-      {/* Gross sales for the selected range */}
+      {/* Gross profit for the selected range */}
       <section
         className="mt-5 rounded-xl border border-line bg-surface p-5"
         data-rise
@@ -159,8 +163,8 @@ export default function AdminOverviewPage() {
             </button>
           </div>
         ) : sales.loading ? (
-          <p className="py-10 text-center text-[14px] text-mute" aria-busy="true">
-            Loading sales…
+          <p className="py-10 text-center text-[14px]">
+            <Loading label="Loading sales…" />
           </p>
         ) : days.length === 0 ? (
           <p className="py-10 text-center text-[14px] text-mute">
@@ -169,9 +173,6 @@ export default function AdminOverviewPage() {
         ) : (
           <>
             <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-              {/* The kita headline is profit: sales minus what the goods cost.
-                  The deposit figures stay on gross — the bank gets money taken,
-                  not margin. */}
               <div>
                 <h2 className="text-[13px] font-medium text-mute">Gross profit</h2>
                 <p className="mt-1 text-[28px] font-semibold leading-none tracking-[-0.01em] tabular-nums text-ink">
@@ -182,12 +183,6 @@ export default function AdminOverviewPage() {
                 </p>
               </div>
               <dl className="flex flex-wrap gap-6">
-                <div>
-                  <dt className="text-[12px] text-mute">Gross sales</dt>
-                  <dd className="mt-0.5 text-[15px] font-medium tabular-nums text-ink-soft">
-                    {peso.format(grossTotal)}
-                  </dd>
-                </div>
                 <div>
                   <dt className="text-[12px] text-mute">Expenses</dt>
                   <dd className="mt-0.5 text-[15px] font-medium tabular-nums text-ink-soft">
@@ -208,7 +203,7 @@ export default function AdminOverviewPage() {
                 No sales recorded yet today. The chart fills in as the day goes.
               </p>
             ) : (
-              <SalesChart data={chartData} ariaLabel={`Gross sales chart, ${label}, ${scopeLabel}`} />
+              <SalesChart data={chartData} ariaLabel={`Gross profit chart, ${label}, ${scopeLabel}`} />
             )}
           </>
         )}
@@ -223,8 +218,8 @@ export default function AdminOverviewPage() {
         {days.length > 0 && (
           <div className="xl:order-2">
             <BranchSalesCard
-              title="Sales by branch"
-              subtitle={`${label} · gross sales, highest first.`}
+              title="Profit by branch"
+              subtitle={`${label} · gross profit, highest first.`}
               rows={branchSales}
               total={branchSalesTotal}
               highlightId={allBranches ? null : storeId}
@@ -243,7 +238,7 @@ export default function AdminOverviewPage() {
 
         <div className="mt-2 hidden gap-x-4 border-b border-line px-5 py-2.5 sm:grid sm:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
           <span className="text-[12px] font-medium text-mute">{firstColHeader}</span>
-          <span className="text-right text-[12px] font-medium text-mute">Gross sales</span>
+          <span className="text-right text-[12px] font-medium text-mute">Gross profit</span>
           <span className="text-right text-[12px] font-medium text-mute">Expenses</span>
           <span className="text-right text-[12px] font-medium text-mute">Expected deposit</span>
         </div>
@@ -268,7 +263,7 @@ export default function AdminOverviewPage() {
                 <li key={r.key} className={rowGrid}>
                   <span className="text-[13.5px] font-medium text-ink-soft">{r.label}</span>
                   <span className="text-right text-[14px] font-semibold tabular-nums text-ink">
-                    {peso.format(r.gross)}
+                    {peso.format(r.profit)}
                   </span>
                   <span className="text-[12px] tabular-nums text-mute sm:text-right sm:text-[13px]">
                     <span className="sm:hidden">Expenses </span>
@@ -276,7 +271,7 @@ export default function AdminOverviewPage() {
                   </span>
                   <span className="text-right text-[12px] tabular-nums text-mute sm:text-[13px]">
                     <span className="sm:hidden">Expected </span>
-                    {peso.format(r.gross - r.expenses)}
+                    {peso.format(r.profit - r.expenses)}
                   </span>
                 </li>
               ))}
@@ -285,7 +280,7 @@ export default function AdminOverviewPage() {
             <div className={`${rowGrid} border-t border-line`}>
               <span className="text-[13.5px] font-semibold text-ink">Total</span>
               <span className="text-right text-[14px] font-semibold tabular-nums text-ink">
-                {peso.format(grossTotal)}
+                {peso.format(profitTotal)}
               </span>
               <span className="text-[12px] font-medium tabular-nums text-ink-soft sm:text-right sm:text-[13px]">
                 <span className="sm:hidden">Expenses </span>

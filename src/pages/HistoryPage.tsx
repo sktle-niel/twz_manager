@@ -5,6 +5,7 @@ import { api } from "../lib/api"
 import type { DayStatus } from "../lib/api"
 import { useApi } from "../lib/useApi"
 import { BranchTag, FilterSelect } from "../components/ui"
+import { Loading } from "../components/Loading"
 import { useManagerSession } from "../lib/session"
 import { StatCard } from "../components/StatCard"
 import type { Stat } from "../components/StatCard"
@@ -154,14 +155,16 @@ export default function HistoryPage() {
         <div className="px-5 pb-1 pt-4">
           <h2 className="text-[15px] font-semibold text-ink">{storeName} branch</h2>
           <p className="mt-0.5 text-[13px] text-mute">
-            Expected deposit is gross sales minus logged expenses for the day.
+            Expected deposit is gross profit minus logged expenses for the day.
           </p>
         </div>
 
         <AuditHeader cols={AUDIT_COLS} withBranch={false} />
 
         {audits.loading && rows.length === 0 ? (
-          <p className="px-5 py-10 text-center text-[14px] text-mute">Loading…</p>
+          <p className="px-5 py-10 text-center text-[14px]">
+            <Loading />
+          </p>
         ) : audits.error ? (
           <p role="alert" className="flex flex-wrap items-center justify-center gap-2 px-5 py-10 text-center text-[14px] text-claret">
             {audits.error}

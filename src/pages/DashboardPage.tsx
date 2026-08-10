@@ -4,6 +4,7 @@ import { BranchTag } from "../components/ui"
 import { DateRangePicker } from "../components/DateRangePicker"
 import { SalesChart } from "../components/SalesChart"
 import type { SalesPoint } from "../components/SalesChart"
+import { Loading } from "../components/Loading"
 import { NoticeCard } from "../components/NoticeCard"
 import { Pagination } from "../components/Pagination"
 import { api } from "../lib/api"
@@ -72,14 +73,17 @@ export default function DashboardPage() {
   const byDay = new Map((sales.data ?? []).map((row) => [row.day, row]))
   const inRange = days.map((d) => byDay.get(dayKey(d))).filter((r) => r !== undefined)
 
+  /* Every figure on the page is PROFIT — the kita. Gross sales stays on the
+     wire but never on screen. */
   const chartData: SalesPoint[] = singleDay
     ? (hourly.data ?? []).map((p) => ({ label: hourLabel(p.hour), amount: p.amount }))
-    : days.map((d) => ({ label: shortDate(d), amount: byDay.get(dayKey(d))?.gross ?? 0 }))
+    : days.map((d) => ({ label: shortDate(d), amount: byDay.get(dayKey(d))?.profit ?? 0 }))
 
-  const grossTotal = inRange.reduce((sum, r) => sum + r.gross, 0)
   const profitTotal = inRange.reduce((sum, r) => sum + r.profit, 0)
   const expensesTotal = inRange.reduce((sum, r) => sum + r.expenses, 0)
-  const expectedTotal = grossTotal - expensesTotal
+  /* House rule: the bank gets profit minus the day's spend; the capital
+     share of the takings stays in the shop to restock */
+  const expectedTotal = profitTotal - expensesTotal
 
   const storeLabel = store.name
   const label = rangeLabel(range, today)
@@ -107,7 +111,7 @@ export default function DashboardPage() {
         <DateRangePicker value={range} onChange={setRange} today={today} />
       </div>
 
-      {/* Gross sales for the selected range */}
+      {/* Gross profit for the selected range */}
       <section
         className="mt-5 rounded-xl border border-line bg-surface p-5"
         data-rise
@@ -129,8 +133,8 @@ export default function DashboardPage() {
             </button>
           </div>
         ) : sales.loading ? (
-          <p className="py-10 text-center text-[14px] text-mute" aria-busy="true">
-            Loading sales…
+          <p className="py-10 text-center text-[14px]">
+            <Loading label="Loading sales…" />
           </p>
         ) : days.length === 0 ? (
           <p className="py-10 text-center text-[14px] text-mute">
@@ -139,9 +143,6 @@ export default function DashboardPage() {
         ) : (
           <>
             <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-              {/* The kita headline is profit: sales minus what the goods cost.
-                  The deposit figures stay on gross — the bank gets money taken,
-                  not margin. */}
               <div>
                 <h2 className="text-[13px] font-medium text-mute">Gross profit</h2>
                 <p className="mt-1 text-[28px] font-semibold leading-none tracking-[-0.01em] tabular-nums text-ink">
@@ -152,12 +153,6 @@ export default function DashboardPage() {
                 </p>
               </div>
               <dl className="flex flex-wrap gap-6">
-                <div>
-                  <dt className="text-[12px] text-mute">Gross sales</dt>
-                  <dd className="mt-0.5 text-[15px] font-medium tabular-nums text-ink-soft">
-                    {peso.format(grossTotal)}
-                  </dd>
-                </div>
                 <div>
                   <dt className="text-[12px] text-mute">Expenses</dt>
                   <dd className="mt-0.5 text-[15px] font-medium tabular-nums text-ink-soft">
@@ -178,7 +173,7 @@ export default function DashboardPage() {
                 No sales recorded yet today. The chart fills in as the day goes.
               </p>
             ) : (
-              <SalesChart data={chartData} ariaLabel={`Gross sales chart, ${label}, ${storeLabel}`} />
+              <SalesChart data={chartData} ariaLabel={`Gross profit chart, ${label}, ${storeLabel}`} />
             )}
           </>
         )}
@@ -208,13 +203,13 @@ export default function DashboardPage() {
         <div className="px-5 pb-1 pt-4">
           <h2 className="text-[15px] font-semibold text-ink">{listTitle}</h2>
           <p className="mt-0.5 text-[13px] text-mute">
-            Gross sales, expenses, and the expected bank deposit per day.
+            Gross profit, expenses, and the expected bank deposit per day.
           </p>
         </div>
 
         <div className="mt-2 hidden gap-x-4 border-b border-line px-5 py-2.5 sm:grid sm:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
           <span className="text-[12px] font-medium text-mute">Date</span>
-          <span className="text-right text-[12px] font-medium text-mute">Gross sales</span>
+          <span className="text-right text-[12px] font-medium text-mute">Gross profit</span>
           <span className="text-right text-[12px] font-medium text-mute">Expenses</span>
           <span className="text-right text-[12px] font-medium text-mute">Expected deposit</span>
         </div>
@@ -239,7 +234,7 @@ export default function DashboardPage() {
           <ul className="divide-y divide-line">
             {pageDays.map((d) => {
               const row = byDay.get(dayKey(d))
-              const gross = row?.gross ?? 0
+              const profit = row?.profit ?? 0
               const spent = row?.expenses ?? 0
               return (
                 <li key={dayKey(d)} className={rowGrid}>
@@ -247,7 +242,7 @@ export default function DashboardPage() {
                     {sameDay(d, today) ? `Today, ${shortDate(d)}` : rowDate(d)}
                   </span>
                   <span className="text-right text-[14px] font-semibold tabular-nums text-ink">
-                    {peso.format(gross)}
+                    {peso.format(profit)}
                   </span>
                   <span className="text-[12px] tabular-nums text-mute sm:text-right sm:text-[13px]">
                     <span className="sm:hidden">Expenses </span>
@@ -255,7 +250,7 @@ export default function DashboardPage() {
                   </span>
                   <span className="text-right text-[12px] tabular-nums text-mute sm:text-[13px]">
                     <span className="sm:hidden">Expected </span>
-                    {peso.format(gross - spent)}
+                    {peso.format(profit - spent)}
                   </span>
                 </li>
               )

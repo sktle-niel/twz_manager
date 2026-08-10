@@ -6,7 +6,10 @@ import { createContext, useContext } from "react"
  * action had to reinvent its own confirmation. Now any page raises a message
  * through useToast() and the provider owns the single portalled Toast.
  */
-export type ToastApi = { showToast: (message: string) => void }
+/** "ok" draws the check; "error" wears claret and a warning mark */
+export type ToastTone = "ok" | "error"
+
+export type ToastApi = { showToast: (message: string, tone?: ToastTone) => void }
 
 export const ToastContext = createContext<ToastApi | null>(null)
 

@@ -159,10 +159,12 @@ function ResetPanel({
             id={`pin-${manager.id}`}
             type="password"
             inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={4}
             autoComplete="off"
             placeholder="4 digits"
             value={pin}
-            onChange={(e) => setPin(e.target.value)}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
             aria-invalid={Boolean(errors.pin)}
             className={`${inputBase} ${errors.pin ? inputBad : inputOk}`}
           />

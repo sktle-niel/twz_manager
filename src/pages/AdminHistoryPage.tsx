@@ -6,6 +6,7 @@ import type { DayAudit, DayStatus, Store } from "../lib/api"
 import { useApi } from "../lib/useApi"
 import { useOwnerSession } from "../lib/session"
 import { FilterSelect } from "../components/ui"
+import { Loading } from "../components/Loading"
 import { StatCard } from "../components/StatCard"
 import type { Stat } from "../components/StatCard"
 import { Pagination } from "../components/Pagination"
@@ -179,7 +180,7 @@ export default function AdminHistoryPage() {
           <div>
             <h2 className="text-[15px] font-semibold text-ink">{scopeLabel}</h2>
             <p className="mt-0.5 text-[13px] text-mute">
-              Expected deposit is gross sales minus logged expenses for the day.
+              Expected deposit is gross profit minus logged expenses for the day.
             </p>
           </div>
           <span className="shrink-0 text-[12px] tabular-nums text-mute">
@@ -201,7 +202,9 @@ export default function AdminHistoryPage() {
             </button>
           </p>
         ) : audits.loading && rows.length === 0 ? (
-          <p className="px-5 py-10 text-center text-[14px] text-mute">Loading…</p>
+          <p className="px-5 py-10 text-center text-[14px]">
+            <Loading />
+          </p>
         ) : rows.length === 0 ? (
           <p className="px-5 py-10 text-center text-[14px] text-mute">
             No days match these filters.
