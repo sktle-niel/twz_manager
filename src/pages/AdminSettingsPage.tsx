@@ -192,10 +192,12 @@ function RecoveryPinCard() {
                   id="pin-current"
                   type="password"
                   inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={4}
                   autoComplete="off"
                   placeholder="4 digits"
                   value={currentPin}
-                  onChange={(e) => setCurrentPin(e.target.value)}
+                  onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
                   aria-invalid={Boolean(errors.currentPin)}
                   className={`${inputBase} ${errors.currentPin ? inputBad : inputOk}`}
                 />
@@ -205,6 +207,7 @@ function RecoveryPinCard() {
                   id="pin-new"
                   type="text"
                   inputMode="numeric"
+                  pattern="[0-9]*"
                   autoComplete="off"
                   maxLength={4}
                   placeholder="4 digits"
@@ -219,6 +222,7 @@ function RecoveryPinCard() {
                   id="pin-confirm"
                   type="text"
                   inputMode="numeric"
+                  pattern="[0-9]*"
                   autoComplete="off"
                   maxLength={4}
                   placeholder="The same 4 digits"

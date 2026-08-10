@@ -135,12 +135,16 @@ export type HourPoint = {
 export type DailySales = {
   storeId: string
   day: DayKey
-  /** Money taken at the till, net of refunds — what a bank deposit must match */
+  /** Money taken at the till, net of refunds — kept on the wire, not displayed */
   gross: number
-  /** Gross minus what the goods cost the shop: the kita figure */
+  /** Gross minus what the goods cost the shop: THE figure, everywhere */
   profit: number
   expenses: number
-  /** gross - expenses; deposits reconcile against money, never margin */
+  /**
+   * profit - expenses, the house rule: the capital share of the takings
+   * stays in the shop to restock, so the bank gets the profit less the
+   * day's spend. The authoritative per-day figure lives on DayAudit.
+   */
   expected: number
 }
 
@@ -149,8 +153,12 @@ export type DayStatus = "open" | "pending" | "matched" | "discrepancy"
 export type DayAudit = {
   storeId: string
   day: DayKey
+  /** Money taken at the till — kept on the wire, not displayed */
   gross: number
+  /** Gross minus what the goods cost: the figure the audit pages show */
+  profit: number
   expenses: number
+  /** profit - expenses: the amount the bank slip must match (house rule) */
   expected: number
   /** Null until a deposit covers the day */
   deposited: number | null

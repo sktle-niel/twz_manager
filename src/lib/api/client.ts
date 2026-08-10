@@ -47,6 +47,30 @@ export function onUnauthorized(handler: () => void): () => void {
   return () => window.removeEventListener(UNAUTHORIZED_EVENT, handler)
 }
 
+/*
+ * Connection health, as the requests themselves experience it. The pages
+ * already render their own inline failures; these signals exist for the one
+ * global listener that turns them into toasts, so a branch on bad wifi hears
+ * about the connection once instead of deciphering five broken cards.
+ */
+export type NetworkSignal = "offline" | "slow" | "server-error"
+
+const NETWORK_EVENT = "twz:network"
+
+/* A read slower than this is worth saying out loud, even when it succeeds */
+const SLOW_READ_MS = 4500
+
+function signal(kind: NetworkSignal): void {
+  window.dispatchEvent(new CustomEvent<NetworkSignal>(NETWORK_EVENT, { detail: kind }))
+}
+
+/** Fired on offline, slow, and 5xx experiences. Returns the unsubscribe. */
+export function onNetworkSignal(handler: (kind: NetworkSignal) => void): () => void {
+  const listen = (event: Event) => handler((event as CustomEvent<NetworkSignal>).detail)
+  window.addEventListener(NETWORK_EVENT, listen)
+  return () => window.removeEventListener(NETWORK_EVENT, listen)
+}
+
 /** Errors a person can act on, rather than the raw failure */
 function humanise(status: number, body: unknown): string {
   if (typeof body === "object" && body !== null && "message" in body) {
@@ -72,6 +96,7 @@ async function parse(res: Response): Promise<unknown> {
 }
 
 async function request<T>(path: string, init: RequestInit = {}, timeoutMs = READ_TIMEOUT_MS): Promise<T> {
+  const startedAt = performance.now()
   let res: Response
   try {
     res = await fetch(`${BASE}${path}`, {
@@ -81,15 +106,21 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs = READ
     })
   } catch (err) {
     if (err instanceof DOMException && err.name === "TimeoutError") {
+      signal("slow")
       throw new ApiError(0, "The server is taking too long. Try again.")
     }
     // fetch only rejects on a transport failure, so this is the offline case
+    signal("offline")
     throw new ApiError(0, "No connection. Check the branch's internet and try again.")
   }
+
+  // Made it, but slowly — the person waiting deserves to know why
+  if (performance.now() - startedAt > SLOW_READ_MS) signal("slow")
 
   const body = await parse(res)
   if (!res.ok) {
     if (res.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+    if (res.status >= 500) signal("server-error")
     const fields =
       typeof body === "object" && body !== null && "fields" in body
         ? ((body as { fields?: Record<string, string> }).fields ?? undefined)

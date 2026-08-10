@@ -194,7 +194,7 @@ export async function buildCorpus(scope: SearchScope, today: Date): Promise<Sear
                   ? "good"
                   : undefined,
           },
-          { label: "Gross sales", value: peso.format(audit.gross) },
+          { label: "Gross profit", value: peso.format(audit.profit) },
           { label: "Expenses", value: peso.format(audit.expenses) },
           { label: "Expected deposit", value: peso.format(audit.expected) },
           {
@@ -214,7 +214,7 @@ export async function buildCorpus(scope: SearchScope, today: Date): Promise<Sear
           store.name,
           words,
           status,
-          audit.gross,
+          audit.profit,
           audit.expenses,
           audit.expected,
           audit.deposited,

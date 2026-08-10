@@ -39,6 +39,10 @@ import type {
   Store,
 } from "./types"
 
+/* Parts margin in the low thirties, wobbling per day like the real ledger
+   does — profit is gross minus what the goods cost */
+const marginFor = (day: string) => 0.3 + ((day.charCodeAt(8) + day.charCodeAt(9)) % 7) / 100
+
 /* Pretend the network exists, so loading states are real during development */
 const LATENCY = 120
 const settle = <T,>(value: T): Promise<T> =>
@@ -362,10 +366,13 @@ function referenceFor(storeId: string, key: string): string {
 
 function auditFor(storeId: string, day: DayKey): DayAudit {
   const gross = grossFor(storeId, day)
+  const profit = Math.round(gross * marginFor(day) * 100) / 100
   const expenses = expenseTotal(storeId, day)
-  const expected = gross - expenses
+  /* The house rule: what goes to the bank is profit minus the day's spend —
+     the capital share of the takings stays in the shop to restock */
+  const expected = Math.round((profit - expenses) * 100) / 100
   const diff = daysBack(day)
-  const base = { storeId, day, gross, expenses, expected }
+  const base = { storeId, day, gross, profit, expenses, expected }
 
   if (diff <= 0)
     return { ...base, deposited: null, reference: null, slipUrl: null, status: "open" }
@@ -640,16 +647,14 @@ export const sampleApi: TwzApi = {
       for (const day of eachDay(range)) {
         const gross = grossFor(storeId, day)
         const expenses = expenseTotal(storeId, day)
-        /* Parts margin in the low thirties, wobbling per day like the real
-           ledger does — profit is gross minus what the goods cost */
-        const margin = 0.3 + ((day.charCodeAt(8) + day.charCodeAt(9)) % 7) / 100
+        const profit = Math.round(gross * marginFor(day) * 100) / 100
         rows.push({
           storeId,
           day,
           gross,
-          profit: Math.round(gross * margin * 100) / 100,
+          profit,
           expenses,
-          expected: gross - expenses,
+          expected: Math.round((profit - expenses) * 100) / 100,
         })
       }
     }
@@ -657,12 +662,17 @@ export const sampleApi: TwzApi = {
   },
 
   hourlySales: (storeIds, day) => {
+    /* Profit per hour, like the real endpoint — the charts draw kita */
+    const margin = marginFor(day)
     const perStore = storeIds.map((id) => hourlyFor(id, day))
     const length = perStore[0]?.length ?? 0
     return settle(
       Array.from({ length }, (_, i) => ({
         hour: perStore[0][i].hour,
-        amount: perStore.reduce((sum, list) => sum + (list[i]?.amount ?? 0), 0),
+        amount:
+          Math.round(
+            perStore.reduce((sum, list) => sum + (list[i]?.amount ?? 0), 0) * margin * 100,
+          ) / 100,
       })),
     )
   },

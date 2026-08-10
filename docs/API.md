@@ -218,19 +218,21 @@ and an outage — see LOYVERSE.md.
 **200** `DailySales[]` — one row per requested store per day that has sales;
 a day with none simply has no row.
 
-Two different numbers, on purpose: `gross` is money taken at the till net of
-refunds, and it is what `expected = gross - expenses` reconciles against a
-bank slip. `profit` is gross minus what the goods on the receipts cost the
-shop (Loyverse line-item costs, refunds netted) — the kita figure the
-dashboards headline. Deposits never reconcile against profit; nobody deposits
-a margin.
+`profit` (gross minus what the goods on the receipts cost the shop, Loyverse
+line-item costs, refunds netted) is THE figure — every chart, table, and
+headline draws it. `gross` stays on the wire but is never displayed.
 
-*Interim:* until the expenses slice is built server-side, `expenses` is `0`
-and `expected` equals `gross`.
+**The house rule:** `expected = profit - expenses`. The capital share of the
+takings stays in the shop to restock; what goes to the bank is the profit
+less the day's spend. Sales rows carry no expense join, so their `expected`
+reads `profit` as-is — the authoritative per-day figure a deposit is matched
+against always comes from `/audits`.
 
 ### `GET /sales/hourly?storeIds=…&day=…`
 **200** `HourPoint[]` summed across the requested stores, branch-local hours,
-partial while the day is open. Hours with no sales have no point.
+partial while the day is open. Hours with no sales have no point. `amount` is
+**gross profit** for the hour, matching every figure the charts draw — gross
+remains the deposit number, on `/audits` and in `DailySales.gross`.
 
 ## Expenses
 
@@ -275,7 +277,9 @@ icon, deliberately.
 **200** `DayAudit[]` — one per store per day. `status` progresses
 `open` (today) → `pending` (audited, no deposit) → `matched` / `discrepancy`.
 `deposited`, `reference`, and `slipUrl` come from the covering deposit, null
-until one exists.
+until one exists. Rows carry both `gross` and `profit`; the pages display
+profit, and `expected = profit - expenses` (the house rule) is the amount the
+covering deposit is matched against.
 
 **The ledger has a start day** (a backend setting, `audit_start_day`): days
 before it were settled in the world before this app existed. They carry no

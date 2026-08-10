@@ -2,6 +2,8 @@ import { Suspense, lazy } from "react"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import AppShell from "./components/AppShell"
 import AdminShell from "./components/AdminShell"
+import { ConnectionToasts } from "./components/ConnectionToasts"
+import { Loading } from "./components/Loading"
 import { RequireManager, RequireOwner } from "./components/RequireRole"
 import { ScrollToTop } from "./components/ScrollToTop"
 import { SessionProvider } from "./components/SessionProvider"
@@ -26,8 +28,16 @@ function App() {
       {/* Above the routes so it covers both shells and the login page at once */}
       <ScrollToTop />
       <ToastProvider>
+        {/* One listener turns connection trouble into words, app-wide */}
+        <ConnectionToasts />
         <SessionProvider>
-        <Suspense fallback={<div className="min-h-[100dvh]" aria-busy="true" />}>
+        <Suspense
+          fallback={
+            <div className="flex min-h-[100dvh] items-center justify-center">
+              <Loading className="text-[14px]" />
+            </div>
+          }
+        >
           <Routes>
           {/* Who may enter which side is the guards' decision, not the URL's */}
           <Route element={<RequireManager />}>

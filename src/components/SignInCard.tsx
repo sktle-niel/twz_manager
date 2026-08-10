@@ -4,6 +4,7 @@
  * sign-in from another device and links here for the full history.
  */
 import { DeviceMobileIcon, LaptopIcon } from "@phosphor-icons/react"
+import { Loading } from "./Loading"
 import { timeAgo } from "../lib/format"
 import type { SignInEvent } from "../lib/api"
 
@@ -26,7 +27,9 @@ export function SignInCard({
       </div>
       <ul className="divide-y divide-line border-t border-line">
         {loading && events.length === 0 && (
-          <li className="px-5 py-6 text-center text-[13px] text-mute">Loading…</li>
+          <li className="px-5 py-6 text-center text-[13px]">
+            <Loading />
+          </li>
         )}
         {events.map((e) => {
           const DeviceIcon = e.kind === "phone" ? DeviceMobileIcon : LaptopIcon
