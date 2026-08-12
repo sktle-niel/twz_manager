@@ -97,7 +97,7 @@ export default function AdminSalesFilterPage() {
         </p>
       </div>
 
-      <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
         {/* Find items to filter out */}
         <section className="rounded-xl border border-line bg-surface p-5 sm:p-6" data-rise>
           <h2 className="text-[15px] font-semibold text-ink">Add an item</h2>

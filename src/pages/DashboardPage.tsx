@@ -184,7 +184,7 @@ export default function DashboardPage() {
         comes first in the DOM so a phone gets what needs acting on before the
         long paged list, then `order` puts it back on the right at xl.
       */}
-      <div className="mt-5 grid items-start gap-5 xl:grid-cols-[1.6fr_1fr]">
+      <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <div className="xl:order-2">
           <NoticeCard
             title="Status"

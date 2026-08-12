@@ -321,7 +321,7 @@ export default function AdminManagersPage() {
         </p>
       </div>
 
-      <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
         {/* Team */}
         <section className="rounded-xl border border-line bg-surface" data-rise>
           <div className="px-5 pb-1 pt-4">
