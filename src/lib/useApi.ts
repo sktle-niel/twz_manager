@@ -8,6 +8,14 @@ import { ApiError } from "./api"
  * a superseded call is dropped rather than applied: filters change faster than
  * requests come back, and without the guard a slow response for last week's
  * range lands on top of this week's.
+ *
+ * Reads are cached per tab and served stale-while-revalidate: coming back to a
+ * page paints the last answer instantly while the fresh one is fetched behind
+ * it. The cache never suppresses a request — every mount and every reload()
+ * still asks the API — it only removes the blank-and-spinner wait in between.
+ * The key is the fetcher's own source text plus its deps, which is exactly
+ * "the same call from the same place"; sign-in and sign-out clear everything,
+ * so one account's figures can never flash at another.
  */
 export type Async<T> = {
   data: T | null
@@ -17,23 +25,42 @@ export type Async<T> = {
   reload: () => void
 }
 
+const cache = new Map<string, unknown>()
+
+/** Forget every cached read — called when the signed-in identity changes */
+export function clearApiCache(): void {
+  cache.clear()
+}
+
 export function useApi<T>(run: () => Promise<T>, deps: unknown[]): Async<T> {
-  const [data, setData] = useState<T | null>(null)
-  const [loading, setLoading] = useState(true)
+  const key = `${run.toString()}|${JSON.stringify(deps)}`
+  const [data, setData] = useState<T | null>(() => (cache.get(key) as T | undefined) ?? null)
+  const [loading, setLoading] = useState(() => !cache.has(key))
   const [error, setError] = useState<string | null>(null)
   const [nonce, setNonce] = useState(0)
 
-  /* Held in a ref so an inline arrow does not count as a dependency change */
+  /* Held in refs so inline arrows do not count as dependency changes */
   const runRef = useRef(run)
   runRef.current = run
+  const keyRef = useRef(key)
+  keyRef.current = key
 
   useEffect(() => {
     let live = true
-    setLoading(true)
+    const thisKey = keyRef.current
+    const cached = cache.get(thisKey) as T | undefined
+    if (cached !== undefined) {
+      // The stale answer paints now; the fresh one replaces it when it lands
+      setData(cached)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
     setError(null)
     runRef
       .current()
       .then((value) => {
+        cache.set(thisKey, value)
         if (!live) return
         setData(value)
         setLoading(false)

@@ -8,6 +8,17 @@ import { DUR, prefersReducedMotion } from "../lib/motion"
 const MENU_WIDTH = 190
 const GUTTER = 8
 
+/* Under the trigger's right edge, clamped inside the viewport */
+function place(rect: DOMRect): { top: number; left: number } {
+  return {
+    top: rect.bottom + 4,
+    left: Math.max(
+      GUTTER,
+      Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - GUTTER),
+    ),
+  }
+}
+
 export type RowMenuItem = {
   label: string
   onSelect: () => void
@@ -36,20 +47,36 @@ export function RowMenu({ label, items }: { label: string; items: RowMenuItem[] 
     { dependencies: [open], revertOnUpdate: true },
   )
 
+  /* The menu is fixed, so a scroll would detach it from its row — it follows
+     the trigger's rect instead of closing, and only closes once the row has
+     scrolled clean off the screen. rAF-throttled; capture phase, because the
+     scroll may happen in any ancestor, not the window itself. */
   useEffect(() => {
     if (!open) return
-    const close = () => setAnchor(null)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close()
+      if (e.key === "Escape") setAnchor(null)
+    }
+    let frame = 0
+    const follow = () => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        const rect = triggerRef.current?.getBoundingClientRect()
+        if (!rect || rect.bottom < 0 || rect.top > window.innerHeight) {
+          setAnchor(null)
+          return
+        }
+        setAnchor(place(rect))
+      })
     }
     window.addEventListener("keydown", onKey)
-    window.addEventListener("resize", close)
-    // Capture phase: the menu is fixed, so any scroll would detach it
-    window.addEventListener("scroll", close, true)
+    window.addEventListener("resize", follow)
+    window.addEventListener("scroll", follow, true)
     return () => {
+      if (frame) cancelAnimationFrame(frame)
       window.removeEventListener("keydown", onKey)
-      window.removeEventListener("resize", close)
-      window.removeEventListener("scroll", close, true)
+      window.removeEventListener("resize", follow)
+      window.removeEventListener("scroll", follow, true)
     }
   }, [open])
 
@@ -60,13 +87,7 @@ export function RowMenu({ label, items }: { label: string; items: RowMenuItem[] 
     }
     const rect = triggerRef.current?.getBoundingClientRect()
     if (!rect) return
-    setAnchor({
-      top: rect.bottom + 4,
-      left: Math.max(
-        GUTTER,
-        Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - GUTTER),
-      ),
-    })
+    setAnchor(place(rect))
   }
 
   return (

@@ -4,6 +4,7 @@ import { api, onUnauthorized } from "../lib/api"
 import type { Session, Store } from "../lib/api"
 import { AuthContext } from "../lib/session"
 import type { AuthStatus } from "../lib/session"
+import { clearApiCache } from "../lib/useApi"
 
 type State =
   | { status: "loading" | "signed-out" }
@@ -54,12 +55,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
      is the state a failed sign-in is already in. */
   useEffect(() => {
     return onUnauthorized(() => {
+      clearApiCache()
       setState((prev) => (prev.status === "manager" || prev.status === "owner" ? { status: "signed-out" } : prev))
     })
   }, [])
 
   const signIn = useCallback(
     async (identifier: string, password: string, remember: boolean) => {
+      // A different identity must never be served the previous one's reads
+      clearApiCache()
       const session = await api.signIn(identifier, password, remember)
       setState(await adopt(session))
       return session
@@ -73,6 +77,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } finally {
       /* The UI signs out even if the DELETE was lost to the network — showing
          a signed-in shell after the user asked to leave is the worse failure */
+      clearApiCache()
       setState({ status: "signed-out" })
     }
   }, [])

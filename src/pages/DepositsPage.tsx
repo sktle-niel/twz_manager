@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import type { SubmitEvent } from "react"
+import type { ReactNode, SubmitEvent } from "react"
+import { Link } from "react-router-dom"
 import { CheckCircleIcon, SpinnerGapIcon, WarningCircleIcon } from "@phosphor-icons/react"
 import { peso, rowDate, shortDate } from "../lib/format"
 import { ApiError, api } from "../lib/api"
@@ -19,13 +20,13 @@ import { SlipCamera } from "../components/SlipCamera"
 import type { ReceiptEntry } from "../lib/receipts"
 import { inspectSlip } from "../lib/slipCheck"
 import type { KnownSlip, SlipReport } from "../lib/slipCheck"
-import { readSlip } from "../lib/slipRead"
-import type { SlipFields } from "../lib/slipRead"
+import { foldBank, readSlip } from "../lib/slipRead"
 import { useManagerSession } from "../lib/session"
 import { useToast } from "../lib/toast"
 
 type FieldErrors = {
   amount?: string
+  online?: string
   date?: string
   reference?: string
   days?: string
@@ -53,6 +54,19 @@ type RecordedDeposit = {
 }
 
 
+/* One claret line under the day list — the shape every selection warning
+   shares, so three different warnings cannot drift into three designs */
+function SelectionNotice({ children }: { children: ReactNode }) {
+  return (
+    <div role="status" className="border-t border-line px-5 py-3">
+      <p className="flex items-start gap-1.5 text-[13px] leading-[1.55] text-claret">
+        <WarningCircleIcon size={15} weight="fill" aria-hidden="true" className="mt-[2px] shrink-0" />
+        <span>{children}</span>
+      </p>
+    </div>
+  )
+}
+
 function StatusChip({ matched }: { matched: boolean }) {
   return matched ? (
     <span className="inline-flex items-center gap-1 rounded-full bg-sage px-2 py-0.5 text-[11px] font-medium text-sage-ink">
@@ -73,13 +87,15 @@ export default function DepositsPage() {
   const storeId = store.id
   const [checkedDays, setCheckedDays] = useState<Record<string, boolean>>({})
   const [amount, setAmount] = useState("")
+  /* GCash / bank-transfer money for the covered days — sales that never
+     touched the drawer, declared so the cash deposit does not read as short */
+  const [online, setOnline] = useState("")
   const [reference, setReference] = useState("")
   const [depositDate, setDepositDate] = useState(() => dayKey(new Date()))
   const [slip, setSlip] = useState<File | null>(null)
   const [slipReport, setSlipReport] = useState<SlipReport | null>(null)
   const [cameraOpen, setCameraOpen] = useState(false)
   const [reading, setReading] = useState(false)
-  const [slipFields, setSlipFields] = useState<SlipFields | null>(null)
   /* Which fields the slip filled, so they can say so and stop saying it the
      moment the manager types over them */
   const [fromSlip, setFromSlip] = useState({ amount: false, reference: false, date: false })
@@ -124,14 +140,41 @@ export default function DepositsPage() {
     (sum, d) => sum + (expectedByDay.get(dayKey(d)) ?? 0),
     0,
   )
+  /* Enforced only once the real rule has arrived — blocking on the fallback
+     value would refuse selections the owner's actual window allows. The
+     backend refuses regardless, so nothing rides on this arriving. */
+  const overWindow =
+    rules.data !== null && selectedDays.length > rules.data.batchWindowDays
+      ? selectedDays.length - rules.data.batchWindowDays
+      : 0
+  /* Selected days with no expenses logged — usually days someone forgot.
+     Flagged in the list the moment they are picked, so the manager hears it
+     while there is still time to log, not first at the recording modal. */
+  const bareSelected = selectedDays
+    .map((d) => dayKey(d))
+    .filter((day) => (expensesByDay.get(day) ?? 0) === 0)
+  /* Days whose expenses exceed what they took in. The arithmetic is honest —
+     nothing is clamped to zero, burying figures is what this app exists to
+     prevent — but a negative expected deposit is a slipped digit in an
+     expense far more often than a real day, so it is named, not just shown. */
+  const negativeSelected = selectedDays
+    .map((d) => dayKey(d))
+    .filter((day) => (expectedByDay.get(day) ?? 0) < 0)
 
   const amountValue = Number(amount.replace(/,/g, ""))
+  const onlineRaw = Number(online.replace(/,/g, ""))
+  /* Blank means none; a bad entry stays out of the sums and validate() names it */
+  const onlineValue =
+    online.trim() !== "" && Number.isFinite(onlineRaw) && onlineRaw > 0 ? onlineRaw : 0
   const showMatch =
     amount.trim() !== "" && Number.isFinite(amountValue) && amountValue > 0 && selectedDays.length > 0
   /* Signed centavos: positive is over, negative is short. Zero while there is
      nothing to compare, so the discrepancy form only appears once both sides
-     exist. Centavos, because an exactly-right ₱12,345.50 must read as a match. */
-  const mismatchCents = showMatch ? cents(amountValue) - cents(selectedTotal) : 0
+     exist. Centavos, because an exactly-right ₱12,345.50 must read as a match.
+     Cash and online are summed — a GCash sale is not a shortfall. */
+  const mismatchCents = showMatch
+    ? cents(amountValue) + cents(onlineValue) - cents(selectedTotal)
+    : 0
   const mismatchAbs = Math.abs(mismatchCents) / 100
 
   const recorded: RecordedDeposit[] = (history.data ?? []).map((d) => {
@@ -165,14 +208,12 @@ export default function DepositsPage() {
   useEffect(() => {
     if (!slip) {
       setSlipReport(null)
-      setSlipFields(null)
       setReading(false)
       setFromSlip({ amount: false, reference: false, date: false })
       return
     }
     let cancelled = false
     setSlipReport(null)
-    setSlipFields(null)
     setReading(false)
 
     inspectSlip(slip, knownSlips, new Date()).then((report) => {
@@ -184,23 +225,29 @@ export default function DepositsPage() {
       readSlip(slip, new Date()).then((fields) => {
         if (cancelled) return
         setReading(false)
-        setSlipFields(fields)
+        /* What the words said, folded into the verdict on the photo — a page
+           with none of the BDO slip's wording on it cannot be filed */
+        setSlipReport((r) => (r ? foldBank(r, fields) : r))
 
         const filled = { amount: false, reference: false, date: false }
-        /* Never write over something the manager already typed — a misread
-           figure replacing a correct one is the one outcome worth avoiding */
-        if (fields.amount !== null && typed.current.amount.trim() === "") {
-          setAmount(String(fields.amount))
-          filled.amount = true
-        }
-        if (fields.reference !== null && typed.current.reference.trim() === "") {
-          setReference(fields.reference)
-          filled.reference = true
-        }
-        // The date always holds today by default, so "untouched" is the test
-        if (fields.date && typed.current.depositDate === defaultDate) {
-          setDepositDate(dayKey(fields.date))
-          filled.date = true
+        /* Figures off a page that is not the slip are not offered — a grocery
+           total landing in the amount field would be worse than nothing */
+        if (fields.bank.kind !== "other") {
+          /* Never write over something the manager already typed — a misread
+             figure replacing a correct one is the one outcome worth avoiding */
+          if (fields.amount !== null && typed.current.amount.trim() === "") {
+            setAmount(String(fields.amount))
+            filled.amount = true
+          }
+          if (fields.reference !== null && typed.current.reference.trim() === "") {
+            setReference(fields.reference)
+            filled.reference = true
+          }
+          // The date always holds today by default, so "untouched" is the test
+          if (fields.date && typed.current.depositDate === defaultDate) {
+            setDepositDate(dayKey(fields.date))
+            filled.date = true
+          }
         }
         setFromSlip(filled)
       })
@@ -210,21 +257,35 @@ export default function DepositsPage() {
     }
   }, [slip, knownSlips, defaultDate])
 
+  /* The photo is still being inspected or read. Recording waits: the words
+     on the page are part of the verdict now, and a submit that outruns them
+     would file what the check was about to refuse. */
+  const checking = slip !== null && (slipReport === null || reading)
+
   function validate(): FieldErrors {
     const next: FieldErrors = {}
     const value = Number(amount.replace(/,/g, ""))
     if (!amount.trim()) next.amount = "Enter the amount deposited."
     else if (!Number.isFinite(value) || value <= 0) next.amount = "Enter an amount above zero."
+    if (online.trim() !== "" && (!Number.isFinite(onlineRaw) || onlineRaw < 0))
+      next.online = "Enter the online amount as a number, or leave it empty."
     if (!/^\d{4}-\d{2}-\d{2}$/.test(depositDate)) next.date = "Enter the deposit date."
     else if (depositDate > dayKey(today)) next.date = "The deposit date cannot be in the future."
     if (!reference.trim()) next.reference = "Enter the reference number from the bank."
     if (selectedDays.length === 0) next.days = "Select at least one day this deposit covers."
+    else if (overWindow > 0)
+      next.days = `One deposit covers at most ${batchWindowDays} ${
+        batchWindowDays === 1 ? "day" : "days"
+      }. Unselect ${overWindow} ${overWindow === 1 ? "day" : "days"}, or record more than one deposit.`
 
     if (!slip) next.slip = "The deposit slip photo is required."
-    /* Only the objective findings block — a file that will not decode, an
-       image too small to read, a photo already filed against another deposit.
-       The heuristics warn and go through: being locked out of filing a deposit
-       over a wrong focus reading is worse than a slip the owner asks again for. */
+    /* The checks are the gate now, so recording waits for them to finish */
+    else if (checking) next.slip = "Still checking the photo. Give it a moment."
+    /* Only the near-objective findings block — a file that will not decode, an
+       image too small to read, a photo already filed against another deposit,
+       a page with none of the BDO slip's wording on it. The heuristics warn
+       and go through: being locked out of filing a deposit over a wrong focus
+       reading is worse than a slip the owner asks again for. */
     else if (slipReport?.level === "fail") next.slip = slipReport.headline
 
     if (mismatchCents !== 0 && reason.trim().length < REASON_MIN) {
@@ -243,12 +304,10 @@ export default function DepositsPage() {
 
     /* A covered day with nothing logged is usually a day someone forgot:
        expenses lower the expected deposit, and a deposited day is final.
-       The warning modal asks once; recording proceeds only on approval. */
-    const bare = selectedDays
-      .map((d) => dayKey(d))
-      .filter((day) => (expensesByDay.get(day) ?? 0) === 0)
-    if (bare.length > 0) {
-      setConfirmBareDays(bare)
+       The list has been flagging it since the day was picked; the modal is
+       the last ask, and recording proceeds only on approval. */
+    if (bareSelected.length > 0) {
+      setConfirmBareDays(bareSelected)
       return
     }
 
@@ -264,11 +323,14 @@ export default function DepositsPage() {
         ? `Covers ${shortDate(selectedDays[0])}`
         : `Covers ${shortDate(selectedDays[0])} to ${shortDate(selectedDays[selectedDays.length - 1])}`
 
+    const onlineAmount = cents(onlineValue) / 100
+
     try {
       await api.recordDeposit({
         storeId,
         day: depositDate,
         amount: value,
+        ...(onlineAmount > 0 ? { online: onlineAmount } : {}),
         reference: reference.trim(),
         covers: selectedDays.map((d) => dayKey(d)),
         slip: slip as File,
@@ -297,7 +359,7 @@ export default function DepositsPage() {
     }
     pending.reload()
     history.reload()
-    const shortfallCents = cents(value) - cents(selectedTotal)
+    const shortfallCents = cents(value) + cents(onlineAmount) - cents(selectedTotal)
     // Remember this slip so the same photo cannot cover a second deposit
     if (slipReport) {
       const filed: KnownSlip = {
@@ -308,6 +370,7 @@ export default function DepositsPage() {
       setFiledSlips((prev) => ({ ...prev, [storeId]: [...(prev[storeId] ?? []), filed] }))
     }
     setAmount("")
+    setOnline("")
     setReference("")
     setSlip(null)
     setReason("")
@@ -315,7 +378,7 @@ export default function DepositsPage() {
     setSaving(false)
     showToast(
       shortfallCents === 0
-        ? `${peso.format(value)} recorded · ${covers.replace(/^Covers /, "covers ")}.`
+        ? `${peso.format(value)}${onlineAmount > 0 ? ` + ${peso.format(onlineAmount)} online` : ""} recorded · ${covers.replace(/^Covers /, "covers ")}.`
         : `Recorded with a discrepancy: ${peso.format(Math.abs(shortfallCents) / 100)} ${shortfallCents > 0 ? "over" : "short"}.`,
     )
   }
@@ -394,9 +457,37 @@ export default function DepositsPage() {
                         }
                         className="h-4 w-4 rounded accent-brand-deep"
                       />
-                      <span className="text-[13.5px] font-medium text-ink-soft">{rowDate(d)}</span>
+                      <span className="flex min-w-0 flex-col">
+                        <span className="text-[13.5px] font-medium text-ink-soft">{rowDate(d)}</span>
+                        {(expensesByDay.get(dayKey(d)) ?? 0) === 0 && (
+                          <span className="flex items-center gap-1 text-[12px] font-medium text-claret">
+                            <WarningCircleIcon
+                              size={13}
+                              weight="fill"
+                              aria-hidden="true"
+                              className="shrink-0"
+                            />
+                            Nothing logged
+                          </span>
+                        )}
+                        {(expectedByDay.get(dayKey(d)) ?? 0) < 0 && (
+                          <span className="flex items-center gap-1 text-[12px] font-medium text-claret">
+                            <WarningCircleIcon
+                              size={13}
+                              weight="fill"
+                              aria-hidden="true"
+                              className="shrink-0"
+                            />
+                            Expenses exceed takings
+                          </span>
+                        )}
+                      </span>
                     </span>
-                    <span className="text-[14px] font-semibold tabular-nums text-ink">
+                    <span
+                      className={`text-[14px] font-semibold tabular-nums ${
+                        (expectedByDay.get(dayKey(d)) ?? 0) < 0 ? "text-claret" : "text-ink"
+                      }`}
+                    >
                       {peso.format(expectedByDay.get(dayKey(d)) ?? 0)}
                     </span>
                   </label>
@@ -411,6 +502,47 @@ export default function DepositsPage() {
                 {peso.format(selectedTotal)}
               </span>
             </div>
+            {/* The batching window speaks while days are being picked, not
+                first at the recording refusal — the fix is one unselect away */}
+            {overWindow > 0 && (
+              <SelectionNotice>
+                {selectedDays.length} days are selected, but one deposit covers at most{" "}
+                {batchWindowDays} {batchWindowDays === 1 ? "day" : "days"} — the owner's batching
+                window. Unselect {overWindow} {overWindow === 1 ? "day" : "days"}, or record this
+                as more than one deposit.
+              </SelectionNotice>
+            )}
+            {/* A negative day is named the moment it is in the selection —
+                the number stays honest, and the likely cause is said out
+                loud rather than left to look like a broken app */}
+            {negativeSelected.length > 0 && (
+              <SelectionNotice>
+                {negativeSelected.length === 1
+                  ? `${rowDate(fromDayKey(negativeSelected[0]))}'s expenses exceed what it took in, so its expected deposit is negative.`
+                  : `${negativeSelected.length} of the selected days' expenses exceed what they took in, so their expected deposits are negative.`}{" "}
+                A slipped digit in an expense is the usual cause.{" "}
+                <Link to="/expenses" className="font-medium underline underline-offset-4">
+                  Check the expense entries
+                </Link>{" "}
+                before depositing.
+              </SelectionNotice>
+            )}
+            {/* Heard here first: the recording modal will ask again, but by
+                then the form is filled — this is where logging is still the
+                easy path */}
+            {bareSelected.length > 0 && (
+              <SelectionNotice>
+                {bareSelected.length === 1
+                  ? `${rowDate(fromDayKey(bareSelected[0]))} has no expenses logged.`
+                  : `${bareSelected.length} of the selected days have no expenses logged.`}{" "}
+                Expenses are deducted from the expected deposit, and a deposited day is final.{" "}
+                <Link to="/expenses" className="font-medium underline underline-offset-4">
+                  Log the expenses first
+                </Link>
+                , or record anyway and confirm the {bareSelected.length === 1 ? "day" : "days"} had
+                none.
+              </SelectionNotice>
+            )}
           </>
         )}
         {errors.days && (
@@ -466,13 +598,16 @@ export default function DepositsPage() {
                   {mismatchCents === 0 ? (
                     <>
                       <CheckCircleIcon size={15} weight="fill" aria-hidden="true" />
-                      Matches the expected total for the selected days.
+                      {onlineValue > 0
+                        ? "Cash and online payments together match the expected total."
+                        : "Matches the expected total for the selected days."}
                     </>
                   ) : (
                     <>
                       <WarningCircleIcon size={15} weight="fill" aria-hidden="true" />
                       {peso.format(mismatchAbs)} {mismatchCents > 0 ? "over" : "short"} of{" "}
-                      {peso.format(selectedTotal)}.
+                      {peso.format(selectedTotal)}
+                      {onlineValue > 0 ? `, counting ${peso.format(onlineValue)} online` : ""}.
                     </>
                   )}
                 </p>
@@ -497,6 +632,31 @@ export default function DepositsPage() {
                 aria-describedby={errors.date ? "deposit-date-error" : undefined}
                 className={`${inputBase} ${errors.date ? inputBad : inputOk}`}
               />
+            </FormField>
+            <FormField
+              id="deposit-online"
+              label="GCash / online payments"
+              hint="Money for these days that came in by GCash or bank transfer. Leave empty if none."
+              error={errors.online}
+            >
+              <div className="relative">
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3.5 top-1/2 mt-1 -translate-y-1/2 text-[15px] text-mute"
+                >
+                  ₱
+                </span>
+                <input
+                  id="deposit-online"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={online}
+                  onChange={(e) => setOnline(e.target.value)}
+                  aria-invalid={Boolean(errors.online)}
+                  aria-describedby={errors.online ? "deposit-online-error" : undefined}
+                  className={`${inputBase} pl-8 ${errors.online ? inputBad : inputOk}`}
+                />
+              </div>
             </FormField>
           </div>
 
@@ -587,71 +747,15 @@ export default function DepositsPage() {
                   </div>
                 )}
 
-                {/*
-                  What the bank's own printing says. Offered, never taken as
-                  the answer — OCR misreads, and a wrong figure accepted in
-                  silence is exactly what the reconciliation is here to catch.
-                */}
+                {/* The reading itself stays invisible: figures it finds land
+                    straight in the fields (marked "Read from the slip"), and
+                    the words it finds feed the BDO verdict above. A panel of
+                    raw OCR guesses only demanded explaining. */}
                 {reading && (
                   <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-mute">
                     <SpinnerGapIcon size={14} aria-hidden="true" className="shrink-0 animate-spin" />
                     Reading the printed validation…
                   </p>
-                )}
-
-                {slipFields && (
-                  <div className="mt-2 rounded-lg border border-line bg-canvas px-3 py-2">
-                    {slipFields.failed ? (
-                      <p className="text-[12.5px] leading-[1.5] text-ink-soft">
-                        <span className="font-medium">The slip could not be read.</span> Type the
-                        figures in yourself.
-                      </p>
-                    ) : slipFields.amount === null &&
-                      slipFields.reference === null &&
-                      slipFields.date === null ? (
-                      <p className="text-[12.5px] leading-[1.5] text-ink-soft">
-                        <span className="font-medium">No printed figures found.</span> The
-                        handwritten parts cannot be read. Type them in yourself.
-                      </p>
-                    ) : (
-                      <>
-                        <p className="text-[12px] font-medium uppercase tracking-[0.06em] text-mute">
-                          Read from the slip
-                        </p>
-                        <dl className="mt-1.5 space-y-1">
-                          {[
-                            ["Amount", slipFields.amount === null ? null : peso.format(slipFields.amount)],
-                            ["Reference", slipFields.reference],
-                            ["Date", slipFields.date ? rowDate(slipFields.date) : null],
-                          ].map(([label, value]) => (
-                            <div key={label} className="flex items-baseline justify-between gap-3">
-                              <dt className="text-[12.5px] text-mute">{label}</dt>
-                              <dd
-                                className={`text-[12.5px] font-medium tabular-nums ${
-                                  value ? "text-ink" : "text-mute"
-                                }`}
-                              >
-                                {value ?? "not found"}
-                              </dd>
-                            </div>
-                          ))}
-                        </dl>
-                        <p className="mt-2 text-[12px] leading-[1.5] text-mute">
-                          Check these against the slip before recording. The reading can be wrong.
-                        </p>
-                      </>
-                    )}
-                    {slipFields.text.trim() !== "" && (
-                      <details className="mt-1.5">
-                        <summary className="cursor-pointer text-[12px] text-mute">
-                          Show what was read ({slipFields.confidence}% confidence)
-                        </summary>
-                        <pre className="mt-1.5 max-h-32 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-[1.5] text-ink-soft">
-                          {slipFields.text.trim()}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
                 )}
               </div>
             )}
@@ -670,8 +774,9 @@ export default function DepositsPage() {
               <p className="mt-1 text-[12.5px] leading-[1.5] text-ink-soft">
                 {peso.format(selectedTotal)} was expected for{" "}
                 {selectedDays.length === 1 ? "this day" : `these ${selectedDays.length} days`} and{" "}
-                {peso.format(cents(amountValue) / 100)} was deposited. This cannot be recorded until
-                the difference is explained.
+                {peso.format(cents(amountValue) / 100)} was deposited
+                {onlineValue > 0 ? ` with ${peso.format(cents(onlineValue) / 100)} in online` : ""}.
+                This cannot be recorded until the difference is explained.
               </p>
 
               <div className="mt-3">
@@ -719,10 +824,10 @@ export default function DepositsPage() {
           <div className="flex items-center gap-3 pt-1">
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || checking}
               className="flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-60"
             >
-              {saving ? "Recording" : "Record deposit"}
+              {saving ? "Recording" : checking ? "Checking the slip" : "Record deposit"}
             </button>
           </div>
         </form>

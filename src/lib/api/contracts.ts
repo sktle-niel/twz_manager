@@ -16,6 +16,8 @@
  *    makes that a server-side fact rather than a UI convention.
  */
 import type {
+  AdvanceItem,
+  AdvancePatch,
   DailySales,
   DayAudit,
   DayKey,
@@ -23,8 +25,10 @@ import type {
   ExpenseCategoryConfig,
   ExpenseItem,
   ExpensePatch,
+  FilteredItem,
   HourPoint,
   Manager,
+  NewAdvance,
   NewDeposit,
   NewExpense,
   Owner,
@@ -107,6 +111,14 @@ export type TwzApi = {
   expenseCategories(): Promise<ExpenseCategoryConfig[]>
   saveExpenseCategories(categories: ExpenseCategoryConfig[]): Promise<ExpenseCategoryConfig[]>
 
+  /* ---- cash advances ---- */
+
+  /** Drawer money an employee drew against pay; nets out of the day's expected deposit */
+  advances(storeId: string, range: DayRange): Promise<AdvanceItem[]>
+  addAdvance(input: NewAdvance): Promise<AdvanceItem>
+  updateAdvance(id: string, patch: AdvancePatch): Promise<AdvanceItem>
+  deleteAdvance(id: string): Promise<void>
+
   /* ---- audit and deposits ---- */
 
   dayAudits(storeIds: string[], range: DayRange): Promise<DayAudit[]>
@@ -131,10 +143,38 @@ export type TwzApi = {
   /** Rejects 422 with `fields.currentPin` when the old PIN is wrong. */
   changeResetPin(currentPin: string, newPin: string): Promise<void>
 
+  /* ---- push reminders ---- */
+
+  /** The VAPID public key this browser subscribes with */
+  pushKey(): Promise<string>
+  /** Register this browser's push mailbox to the signed-in account */
+  savePushSubscription(subscription: {
+    endpoint: string
+    keys: { p256dh: string; auth: string }
+  }): Promise<void>
+  /** Forget this browser's mailbox */
+  deletePushSubscription(endpoint: string): Promise<void>
+
   /* ---- settings ---- */
 
   posConnection(): Promise<{ connected: boolean; storesLinked: number; tokenHint: string }>
   reconnectPos(): Promise<void>
+
+  /* ---- the sales filter (owner only) ---- */
+
+  /** Items excluded from gross and profit — services and labor */
+  salesFilter(): Promise<FilteredItem[]>
+  /**
+   * Whole-list replace. Changing the SKUs makes the backend re-pull the
+   * sales history so past figures agree with the list — charts refill within
+   * a few minutes of a save.
+   */
+  saveSalesFilter(items: FilteredItem[]): Promise<FilteredItem[]>
+  /**
+   * Search the POS item catalog by name or SKU. The backend walks the
+   * catalog once and caches it; the frontend never pulls the whole thing.
+   */
+  searchCatalog(q: string): Promise<FilteredItem[]>
   reconciliationRules(): Promise<{ batchWindowDays: number }>
   saveReconciliationRules(rules: { batchWindowDays: number }): Promise<void>
 }

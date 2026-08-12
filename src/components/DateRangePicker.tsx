@@ -74,6 +74,35 @@ export function DateRangePicker({
     return () => window.removeEventListener("keydown", onKey)
   }, [open])
 
+  /* On desktop the panel is fixed and anchored to the trigger, so it follows
+     the trigger's rect while the page scrolls rather than detaching; it only
+     closes once the trigger has scrolled clean off the screen. The phone
+     layout is a bottom sheet and needs none of this. rAF-throttled; capture
+     phase, because the scroll may happen in any ancestor. */
+  useEffect(() => {
+    if (!open || !isDesktop) return
+    let frame = 0
+    const follow = () => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        const rect = triggerRef.current?.getBoundingClientRect()
+        if (!rect || rect.bottom < 0 || rect.top > window.innerHeight) {
+          setOpen(false)
+          return
+        }
+        setAnchor({ top: rect.bottom + 8, left: rect.left })
+      })
+    }
+    window.addEventListener("resize", follow)
+    window.addEventListener("scroll", follow, true)
+    return () => {
+      if (frame) cancelAnimationFrame(frame)
+      window.removeEventListener("resize", follow)
+      window.removeEventListener("scroll", follow, true)
+    }
+  }, [open, isDesktop])
+
   useSheetEnter(panelRef, backdropRef, open)
 
   function openPicker() {

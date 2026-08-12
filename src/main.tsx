@@ -12,3 +12,13 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </StrictMode>,
 )
+
+/* The service worker exists for push reminders only — see public/sw.js. It
+   needs a secure context, which localhost and the deployed origin both are. */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      /* No worker, no reminders — the rest of the app is unaffected */
+    })
+  })
+}

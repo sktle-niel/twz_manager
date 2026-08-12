@@ -15,7 +15,8 @@
  *
  * - `fail` is objective. The file will not decode, the image is too small to
  *   hold readable text, or the exact same photo was already filed against
- *   another deposit. These block the deposit.
+ *   another deposit. These block the deposit. (One more fail arrives later,
+ *   from slipRead: a page carrying none of the BDO slip's wording.)
  * - `warn` is a heuristic — focus, contrast, whether the frame looks like paper
  *   at all, how old the file is. These are wrong often enough that refusing an
  *   upload over one would strand a manager at 9pm with a readable slip, so they
@@ -26,7 +27,7 @@ import { shortDate } from "./format"
 export type SlipLevel = "ok" | "warn" | "fail"
 
 export type SlipFinding = {
-  id: "file" | "size" | "duplicate" | "document" | "focus" | "age"
+  id: "file" | "size" | "duplicate" | "document" | "focus" | "age" | "bank"
   level: Exclude<SlipLevel, "ok">
   title: string
   detail: string
@@ -78,7 +79,8 @@ const INK_LUMA = 110
  *
  * What survives measurement is coarse on purpose. These reject frames with no
  * paper, no print, or no line structure. They cannot tell a bank slip from any
- * other printed page — that needs to read the words, which is OCR.
+ * other printed page — that needs to read the words, which slipRead's
+ * `bankVerdict` now does once the frame has passed here.
  */
 const DOC = {
   /* Paper anywhere in the frame at all, before looking at where */

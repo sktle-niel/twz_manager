@@ -6,6 +6,8 @@
 import { ApiError, get, send, upload } from "./client"
 import type { DayRange, Session, TwzApi } from "./contracts"
 import type {
+  AdvanceItem,
+  FilteredItem,
   DailySales,
   DayAudit,
   DayKey,
@@ -111,6 +113,11 @@ export const httpApi: TwzApi = {
   saveExpenseCategories: (categories) =>
     send<ExpenseCategoryConfig[]>("PUT", "/expense-categories", categories),
 
+  advances: (storeId, r) => get<AdvanceItem[]>("/advances", { storeId, ...range(r) }),
+  addAdvance: (input) => send<AdvanceItem>("POST", "/advances", input),
+  updateAdvance: (id, patch) => send<AdvanceItem>("PATCH", `/advances/${id}`, patch),
+  deleteAdvance: (id) => send<void>("DELETE", `/advances/${id}`),
+
   dayAudits: (storeIds, r) => get<DayAudit[]>("/audits", { storeIds, ...range(r) }),
   pendingDeposits: (storeId) => get<DayAudit[]>("/deposits/pending", { storeId }),
   deposits: (storeId, r) => get<Deposit[]>("/deposits", { storeId, ...range(r) }),
@@ -122,6 +129,7 @@ export const httpApi: TwzApi = {
         storeId: input.storeId,
         day: input.day,
         amount: input.amount,
+        ...(input.online ? { online: input.online } : {}),
         reference: input.reference,
         covers: input.covers,
         ...(input.slipSha ? { slipSha: input.slipSha } : {}),
@@ -130,6 +138,17 @@ export const httpApi: TwzApi = {
       },
       { slip: [input.slip], discrepancyProof: input.discrepancy?.proof ?? [] },
     ),
+
+  pushKey: () => get<{ key: string }>("/push/key").then((r) => r.key),
+  savePushSubscription: (subscription) =>
+    send<void>("POST", "/push/subscriptions", subscription),
+  deletePushSubscription: (endpoint) =>
+    send<void>("DELETE", "/push/subscriptions", { endpoint }),
+
+  salesFilter: () => get<FilteredItem[]>("/settings/sales-filter"),
+  saveSalesFilter: (items) =>
+    send<FilteredItem[]>("PUT", "/settings/sales-filter", { items }),
+  searchCatalog: (q) => get<FilteredItem[]>("/catalog/search", { q }),
 
   posConnection: () =>
     get<{ connected: boolean; storesLinked: number; tokenHint: string }>("/settings/pos"),

@@ -3,6 +3,7 @@ import type { SubmitEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { SignOutIcon } from "@phosphor-icons/react"
 import { FormField, inputBad, inputBase, inputOk } from "../components/ui"
+import { ChangePasswordCard } from "../components/ChangePasswordCard"
 import { AvatarField } from "../components/AvatarField"
 import { SignInCard } from "../components/SignInCard"
 import { ApiError, api } from "../lib/api"
@@ -12,7 +13,6 @@ import { useAuth, useOwnerSession } from "../lib/session"
 import { useToast } from "../lib/toast"
 
 type ProfileErrors = { name?: string; username?: string }
-type PasswordErrors = { current?: string; next?: string; confirm?: string }
 
 export default function AdminAccountPage() {
   const navigate = useNavigate()
@@ -28,12 +28,6 @@ export default function AdminAccountPage() {
   const [removePhoto, setRemovePhoto] = useState(false)
   const [profileErrors, setProfileErrors] = useState<ProfileErrors>({})
   const [profileSaving, setProfileSaving] = useState(false)
-
-  const [currentPassword, setCurrentPassword] = useState("")
-  const [newPassword, setNewPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [passwordErrors, setPasswordErrors] = useState<PasswordErrors>({})
-  const [passwordSaving, setPasswordSaving] = useState(false)
 
   /* Frozen at mount so the sign-in log's relative times hold still between renders */
   const [now] = useState(() => new Date())
@@ -60,31 +54,6 @@ export default function AdminAccountPage() {
       else showToast(err instanceof ApiError ? err.message : "That did not save. Try again.")
     } finally {
       setProfileSaving(false)
-    }
-  }
-
-  async function handlePasswordSubmit(e: SubmitEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const next: PasswordErrors = {}
-    if (!currentPassword) next.current = "Enter your current password."
-    if (!newPassword) next.next = "Enter a new password."
-    else if (newPassword.length < 8) next.next = "Password must be at least 8 characters."
-    if (confirmPassword !== newPassword) next.confirm = "Passwords do not match."
-    setPasswordErrors(next)
-    if (Object.keys(next).length > 0) return
-
-    setPasswordSaving(true)
-    try {
-      await api.changePassword(currentPassword, newPassword)
-      setCurrentPassword("")
-      setNewPassword("")
-      setConfirmPassword("")
-      showToast("Password updated.")
-    } catch (err) {
-      if (err instanceof ApiError && err.fields) setPasswordErrors(err.fields)
-      else showToast(err instanceof ApiError ? err.message : "That did not save. Try again.")
-    } finally {
-      setPasswordSaving(false)
     }
   }
 
@@ -169,62 +138,7 @@ export default function AdminAccountPage() {
         </form>
       </section>
 
-        {/* Password */}
-        <section
-          className="rounded-xl border border-line bg-surface p-5 sm:p-6"
-          data-rise
-        >
-        <h2 className="text-[15px] font-semibold text-ink">Change password</h2>
-        <form onSubmit={handlePasswordSubmit} noValidate className="mt-4 space-y-4">
-          <FormField id="owner-password-current" label="Current password" error={passwordErrors.current}>
-            <input
-              id="owner-password-current"
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              aria-invalid={Boolean(passwordErrors.current)}
-              aria-describedby={passwordErrors.current ? "owner-password-current-error" : undefined}
-              className={`${inputBase} ${passwordErrors.current ? inputBad : inputOk}`}
-            />
-          </FormField>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="owner-password-new" label="New password" error={passwordErrors.next}>
-              <input
-                id="owner-password-new"
-                type="password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                aria-invalid={Boolean(passwordErrors.next)}
-                aria-describedby={passwordErrors.next ? "owner-password-new-error" : undefined}
-                className={`${inputBase} ${passwordErrors.next ? inputBad : inputOk}`}
-              />
-            </FormField>
-            <FormField
-              id="owner-password-confirm"
-              label="Confirm new password"
-              error={passwordErrors.confirm}
-            >
-              <input
-                id="owner-password-confirm"
-                type="password"
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                aria-invalid={Boolean(passwordErrors.confirm)}
-                aria-describedby={passwordErrors.confirm ? "owner-password-confirm-error" : undefined}
-                className={`${inputBase} ${passwordErrors.confirm ? inputBad : inputOk}`}
-              />
-            </FormField>
-          </div>
-          <div className="pt-1">
-            <button type="submit" disabled={passwordSaving} className={submitClass}>
-              {passwordSaving ? "Updating" : "Update password"}
-            </button>
-          </div>
-        </form>
-      </section>
+        <ChangePasswordCard />
 
         {/* Session */}
         <section

@@ -7,13 +7,28 @@
  * half to trust anyway: it is what the bank actually processed, not what the
  * manager wrote down. Handwriting is beyond Tesseract and is not attempted.
  *
- * Everything here is a proposal, never an answer. The figures land in the form
- * for the manager to check, the raw text is kept so a wrong read can be seen
- * rather than guessed at, and the expected total is deliberately NOT used to
- * choose between candidates — letting it pick the reading that happens to
- * match would quietly bury the discrepancies this app exists to surface.
+ * The figures are a proposal, never an answer: they land in the form for the
+ * manager to check, the raw text is kept so a wrong read can be seen rather
+ * than guessed at, and the expected total is deliberately NOT used to choose
+ * between candidates — letting it pick the reading that happens to match
+ * would quietly bury the discrepancies this app exists to surface.
+ *
+ * The wording, though, is a verdict. The pixel checks in slipCheck can tell
+ * paper from a wall but not a bank slip from a grocery receipt — only the
+ * words can, and they are read here anyway. A page carrying none of the BDO
+ * slip's own wording is not the slip, and `foldBank` turns that into the one
+ * finding allowed to block on what was read.
  */
 import { loadImage } from "./slipCheck"
+import type { SlipFinding, SlipLevel, SlipReport } from "./slipCheck"
+
+export type BankVerdict = {
+  /* "slip" — the BDO slip's own wording is on the page; "unsure" — traces of
+     it; "other" — none of it, whatever else the page may be */
+  kind: "slip" | "unsure" | "other"
+  /* Which marks hit, for the calibration script and the curious */
+  matched: string[]
+}
 
 export type SlipFields = {
   amount: number | null
@@ -23,6 +38,8 @@ export type SlipFields = {
   confidence: number
   /* Kept so a bad parse can be diagnosed */
   text: string
+  /* Whether the page carries the BDO slip's wording at all */
+  bank: BankVerdict
   failed: boolean
 }
 
@@ -32,6 +49,7 @@ const EMPTY: SlipFields = {
   date: null,
   confidence: 0,
   text: "",
+  bank: { kind: "other", matched: [] },
   failed: true,
 }
 
@@ -56,6 +74,77 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
 
 const AMOUNT_WORDS = ["amount", "total", "cash", "deposit", "credit", "php", "peso"]
 const REF_WORDS = ["ref", "trn", "seq", "trace", "val", "trace", "transaction", "no."]
+
+/*
+ * The words of a BDO Network Bank cash transaction slip — the branches' own
+ * stationery — grouped by what they prove. Strong marks name the bank or the
+ * form itself; the rest are the form's printed labels and the validation
+ * line's vocabulary, words a shop receipt has no reason to carry. Generic
+ * receipt words ("total amount", "php") are in the list but deliberately
+ * cannot pass on their own: they raise the count, never clear the bar.
+ */
+type BankMark = { name: string; strong: boolean; phrases: string[]; words: string[] }
+
+const BANK_MARKS: BankMark[] = [
+  { name: "BDO", strong: true, phrases: ["banco de oro"], words: ["bdo"] },
+  { name: "Network Bank", strong: true, phrases: ["network bank"], words: [] },
+  { name: "Transaction Slip", strong: true, phrases: ["transaction slip", "cash transaction"], words: [] },
+  { name: "Account Name", strong: false, phrases: ["account name"], words: [] },
+  { name: "Account No", strong: false, phrases: ["account no"], words: [] },
+  { name: "Payor", strong: false, phrases: ["payor"], words: [] },
+  { name: "Machine Validation", strong: false, phrases: ["machine validat"], words: [] },
+  { name: "Denomination", strong: false, phrases: ["denomination"], words: [] },
+  { name: "Total Amount", strong: false, phrases: ["total amount"], words: [] },
+  { name: "Cash Deposit", strong: false, phrases: ["cash deposit"], words: [] },
+  { name: "Cash In", strong: false, phrases: ["cash in"], words: [] },
+  { name: "Savings Acct", strong: false, phrases: ["savings acct"], words: [] },
+  { name: "Separate Slips", strong: false, phrases: ["separate slip"], words: [] },
+  { name: "Institution Code", strong: false, phrases: ["institution code"], words: [] },
+  { name: "Subscriber", strong: false, phrases: ["subscriber"], words: [] },
+  { name: "Borrower", strong: false, phrases: ["borrower"], words: [] },
+  { name: "Promissory", strong: false, phrases: ["promissory"], words: [] },
+  { name: "Company Name", strong: false, phrases: ["company name"], words: [] },
+  { name: "PHP", strong: false, phrases: [], words: ["php"] },
+]
+
+/* A brand or form-title mark plus this many marks in all reads as the slip */
+const SLIP_WITH_BRAND = 3
+/* This many of the form's own labels can only be the slip, brand read or not
+   — set above anything a shop receipt's "total amount" and "php" can reach */
+const SLIP_WITHOUT_BRAND = 5
+/* Below this the page shows essentially none of the slip's wording */
+const UNSURE_FLOOR = 3
+
+/* The letter-for-digit swaps OCR makes on clean print, folded back so a
+   misread "BD0" still counts as the brand */
+const LETTER_FOLD: [RegExp, string][] = [
+  [/0/g, "o"],
+  [/1/g, "l"],
+  [/5/g, "s"],
+  [/8/g, "b"],
+]
+
+export function bankVerdict(text: string): BankVerdict {
+  const plain = text.toLowerCase().replace(/\s+/g, " ")
+  const folded = LETTER_FOLD.reduce((t, [digit, letter]) => t.replace(digit, letter), plain)
+  const has = (needle: string) => plain.includes(needle) || folded.includes(needle)
+  const hasWord = (word: string) => {
+    const bounded = new RegExp(`\\b${word}\\b`)
+    return bounded.test(plain) || bounded.test(folded)
+  }
+
+  const matched = BANK_MARKS.filter(
+    (mark) => mark.phrases.some(has) || mark.words.some(hasWord),
+  )
+  const strong = matched.filter((mark) => mark.strong).length
+  const names = matched.map((mark) => mark.name)
+
+  if ((strong > 0 && matched.length >= SLIP_WITH_BRAND) || matched.length >= SLIP_WITHOUT_BRAND) {
+    return { kind: "slip", matched: names }
+  }
+  if (strong > 0 || matched.length >= UNSURE_FLOOR) return { kind: "unsure", matched: names }
+  return { kind: "other", matched: names }
+}
 
 /* The worker downloads a few MB of wasm and language data on first use, so it
    is created once and kept. The import is dynamic to keep all of it out of the
@@ -240,6 +329,23 @@ export function __parseForTest(text: string, now: Date) {
   return { amount, reference: pickReference(text, amount), date: pickDate(text, now) }
 }
 
+function turned(source: HTMLCanvasElement, deg: 90 | 180 | 270): HTMLCanvasElement {
+  const out = document.createElement("canvas")
+  const swap = deg !== 180
+  out.width = swap ? source.height : source.width
+  out.height = swap ? source.width : source.height
+  const ctx = out.getContext("2d")
+  if (!ctx) return source
+  ctx.translate(out.width / 2, out.height / 2)
+  ctx.rotate((deg * Math.PI) / 180)
+  ctx.drawImage(source, -source.width / 2, -source.height / 2)
+  return out
+}
+
+const KIND_RANK = { slip: 2, unsure: 1, other: 0 }
+
+type Attempt = { text: string; confidence: number; bank: BankVerdict }
+
 export async function readSlip(file: File, now: Date): Promise<SlipFields> {
   let canvas: HTMLCanvasElement | null
   try {
@@ -251,18 +357,97 @@ export async function readSlip(file: File, now: Date): Promise<SlipFields> {
 
   try {
     const worker = await getWorker()
-    const { data } = await worker.recognize(canvas)
-    const text = data.text ?? ""
-    const amount = pickAmount(text)
+
+    /* A slip photographed sideways OCRs to noise, so each frame that shows
+       none of the slip's wording is turned and read again before the verdict
+       stands. A real slip stops at the first upright pass; only a page that
+       is genuinely not the slip pays for all four. */
+    let best: Attempt | null = null
+    for (const turn of [0, 90, 270, 180] as const) {
+      const frame = turn === 0 ? canvas : turned(canvas, turn)
+      const { data } = await worker.recognize(frame)
+      const attempt: Attempt = {
+        text: data.text ?? "",
+        confidence: Math.round(data.confidence ?? 0),
+        bank: bankVerdict(data.text ?? ""),
+      }
+      if (
+        !best ||
+        KIND_RANK[attempt.bank.kind] > KIND_RANK[best.bank.kind] ||
+        (attempt.bank.kind === best.bank.kind && attempt.confidence > best.confidence)
+      ) {
+        best = attempt
+      }
+      if (best.bank.kind === "slip") break
+    }
+    if (!best) return EMPTY
+
+    const amount = pickAmount(best.text)
     return {
       amount,
-      reference: pickReference(text, amount),
-      date: pickDate(text, now),
-      confidence: Math.round(data.confidence ?? 0),
-      text,
+      reference: pickReference(best.text, amount),
+      date: pickDate(best.text, now),
+      confidence: best.confidence,
+      text: best.text,
+      bank: best.bank,
       failed: false,
     }
   } catch {
     return EMPTY
   }
+}
+
+/*
+ * The reading folded back into the slip report, once it exists. Only "none of
+ * the slip's wording anywhere on the page" blocks — it is as close to a fact
+ * as reading gets. Traces of the wording, or a reader that could not run at
+ * all, warn and go through: stranding a manager over a faint print would cost
+ * more than a slip the owner asks about.
+ */
+export function foldBank(report: SlipReport, fields: SlipFields): SlipReport {
+  const finding = bankFinding(fields)
+  if (finding === null) {
+    return report.level === "ok"
+      ? { ...report, headline: "The slip reads as a BDO transaction slip." }
+      : report
+  }
+  const findings = [...report.findings, finding]
+  const level: SlipLevel = findings.some((f) => f.level === "fail") ? "fail" : "warn"
+  return {
+    ...report,
+    level,
+    findings,
+    headline: level === "fail" ? finding.title : "Check the photo before recording",
+  }
+}
+
+function bankFinding(fields: SlipFields): SlipFinding | null {
+  if (fields.failed) {
+    return {
+      id: "bank",
+      level: "warn",
+      title: "The wording could not be checked",
+      detail:
+        "The reader did not run on this device, so make sure the photo is the BDO deposit slip itself.",
+    }
+  }
+  if (fields.bank.kind === "other") {
+    return {
+      id: "bank",
+      level: "fail",
+      title: "This does not read as a BDO deposit slip",
+      detail:
+        "None of the slip's printed wording was found in the photo. Photograph the BDO transaction slip itself — whole, filling the frame, in even light.",
+    }
+  }
+  if (fields.bank.kind === "unsure") {
+    return {
+      id: "bank",
+      level: "warn",
+      title: "Hard to confirm this is the BDO slip",
+      detail:
+        "Only a little of the slip's printed wording could be read. Make sure this is the BDO transaction slip — a clearer photo helps the owner read it too.",
+    }
+  }
+  return null
 }
