@@ -18,6 +18,22 @@ type Anchor = {
 
 const GUTTER = 8
 
+/* Where the listbox sits for a given trigger rect: below when there is room,
+   flipped above when the field is pinned to the bottom of the screen */
+function place(rect: DOMRect): Anchor {
+  const spaceBelow = window.innerHeight - rect.bottom - GUTTER
+  const spaceAbove = rect.top - GUTTER
+  const below = spaceBelow >= 200 || spaceBelow >= spaceAbove
+  return below
+    ? { top: rect.bottom + 4, left: rect.left, width: rect.width, maxHeight: Math.min(288, spaceBelow - 4) }
+    : {
+        bottom: window.innerHeight - rect.top + 4,
+        left: rect.left,
+        width: rect.width,
+        maxHeight: Math.min(288, spaceAbove - 4),
+      }
+}
+
 const filterTrigger =
   "inline-flex items-center gap-2 rounded-lg border border-line-strong bg-surface py-2 pl-3 pr-2.5 text-[16px] text-ink outline-none transition-[border-color,box-shadow] duration-200 ease-quiet hover:border-mute focus-visible:border-brand-deep focus-visible:shadow-[0_0_0_2px_rgba(30,125,27,0.8)] lg:text-[14px]"
 const fieldTrigger =
@@ -66,20 +82,8 @@ export function Select({
     if (disabled) return
     const rect = triggerRef.current?.getBoundingClientRect()
     if (!rect) return
-    const spaceBelow = window.innerHeight - rect.bottom - GUTTER
-    const spaceAbove = rect.top - GUTTER
-    const below = spaceBelow >= 200 || spaceBelow >= spaceAbove
     setActive(selectedIndex >= 0 ? selectedIndex : 0)
-    setAnchor(
-      below
-        ? { top: rect.bottom + 4, left: rect.left, width: rect.width, maxHeight: Math.min(288, spaceBelow - 4) }
-        : {
-            bottom: window.innerHeight - rect.top + 4,
-            left: rect.left,
-            width: rect.width,
-            maxHeight: Math.min(288, spaceAbove - 4),
-          },
-    )
+    setAnchor(place(rect))
   }
 
   /*
@@ -100,7 +104,9 @@ export function Select({
         ease: EASE,
       })
     },
-    { dependencies: [anchor], revertOnUpdate: true },
+    /* On open only — the anchor also changes on every scroll now that the
+       menu follows the trigger, and the pop must not replay mid-scroll */
+    { dependencies: [open], revertOnUpdate: true },
   )
 
   // Move keyboard focus into the listbox when it opens
@@ -114,15 +120,33 @@ export function Select({
     menuRef.current?.querySelector(`#${baseId}-opt-${active}`)?.scrollIntoView({ block: "nearest" })
   }, [open, active, baseId])
 
-  // A scroll or resize would detach the fixed menu, so close it
+  /* The menu is fixed, so a scroll would detach it from the trigger — it
+     follows the trigger's rect instead of closing (scrolling mid-choice is
+     normal, especially with the keyboard up on a phone). Only a trigger
+     scrolled clean off the screen closes it: a floating menu with no field
+     under it reads as a glitch. rAF-throttled; capture phase, because the
+     scroll may happen in any ancestor, not the window itself. */
   useEffect(() => {
     if (!open) return
-    const close = () => setAnchor(null)
-    window.addEventListener("resize", close)
-    window.addEventListener("scroll", close, true)
+    let frame = 0
+    const follow = () => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        const rect = triggerRef.current?.getBoundingClientRect()
+        if (!rect || rect.bottom < 0 || rect.top > window.innerHeight) {
+          setAnchor(null)
+          return
+        }
+        setAnchor(place(rect))
+      })
+    }
+    window.addEventListener("resize", follow)
+    window.addEventListener("scroll", follow, true)
     return () => {
-      window.removeEventListener("resize", close)
-      window.removeEventListener("scroll", close, true)
+      if (frame) cancelAnimationFrame(frame)
+      window.removeEventListener("resize", follow)
+      window.removeEventListener("scroll", follow, true)
     }
   }, [open])
 

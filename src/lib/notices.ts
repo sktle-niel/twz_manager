@@ -119,12 +119,26 @@ export async function branchNotices({
     .sort((a, b) => (a.day < b.day ? 1 : -1))
     .find((a) => a.status === "discrepancy" && a.deposited !== null)
   if (off && off.deposited !== null) {
-    /* Centavos, then named by sign — "short by -₱180" reads as a bug */
-    const diffCents = Math.round(off.deposited * 100) - Math.round(off.expected * 100)
+    /* Centavos, then named by sign — "short by -₱180" reads as a bug. Online
+       money counts with the cash, and the comparison is against what the
+       deposit was judged on: its whole batch, not this one day's figure. */
+    const judged =
+      off.depositExpected ?? ((off.depositCovers?.length ?? 0) > 1 ? null : off.expected)
+    const diffCents =
+      judged === null
+        ? null
+        : Math.round(off.deposited * 100) +
+          Math.round((off.online ?? 0) * 100) -
+          Math.round(judged * 100)
     notices.push({
       id: "discrepancy",
       tone: "alert",
-      title: `Deposit ${diffCents < 0 ? "short" : "over"} by ${peso.format(Math.abs(diffCents) / 100)}`,
+      /* A batch deposit from before the judged sum was stored has no honest
+         figure to name — the row still deserves its alert, just unnumbered */
+      title:
+        diffCents === null
+          ? "A deposit did not match"
+          : `Deposit ${diffCents < 0 ? "short" : "over"} by ${peso.format(Math.abs(diffCents) / 100)}`,
       detail: `${rowDate(fromDayKey(off.day))} · reference ${off.reference}.`,
       to: "/history",
       action: "View in history",

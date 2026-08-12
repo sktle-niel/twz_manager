@@ -19,6 +19,46 @@ export const inputBad =
 export const controlClass =
   "appearance-none rounded-lg border border-line-strong bg-surface py-2 text-[16px] text-ink outline-none transition-[border-color,box-shadow] duration-200 ease-quiet focus:border-brand-deep focus:shadow-[0_0_0_2px_rgba(30,125,27,0.8)] lg:text-[14px]"
 
+/*
+ * Two-or-three-way scope switch, faster than opening a dropdown: the tabs
+ * are all visible, one tap swaps the view. Sized to sit level with the
+ * FilterSelect pills it shares a row with.
+ */
+export function SegmentedTabs<T extends string>({
+  value,
+  onChange,
+  options,
+  ariaLabel,
+}: {
+  value: T
+  onChange: (value: T) => void
+  options: { value: T; label: string }[]
+  ariaLabel: string
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label={ariaLabel}
+      className="inline-flex items-center rounded-lg border border-line-strong bg-surface p-0.5"
+    >
+      {options.map((o) => (
+        <button
+          key={o.value}
+          role="tab"
+          type="button"
+          aria-selected={o.value === value}
+          onClick={() => onChange(o.value)}
+          className={`rounded-md px-3.5 py-[7px] text-[13.5px] font-medium transition-colors duration-200 ease-quiet ${
+            o.value === value ? "bg-sage text-sage-ink" : "text-mute hover:text-ink"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /* Read-only branch indicator, shown where a manager page once had a branch
    picker — a manager is locked to their assigned branch. */
 export function BranchTag({ name }: { name: string }) {

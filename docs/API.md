@@ -271,15 +271,50 @@ duplicate names. Existing expenses keep their old category string when one is
 renamed or removed — the frontend renders unknown categories with a fallback
 icon, deliberately.
 
+## Cash advances
+
+Drawer money an employee drew against their pay. Not an expense — the shop
+gets it back on payday — but on the day it is drawn the cash is gone all the
+same, so the audit ledger subtracts it from that day's expected deposit
+exactly like spend. Kept apart from expenses so spend totals stay what the
+branch actually spent. Same closed-day rule as expenses: once a deposit
+covers the day, its advances are final (**422**).
+
+### `GET /advances?storeId=…&from=…&to=…`
+**200** `AdvanceItem[]`, oldest first.
+
+### `POST /advances`
+Body: `{ storeId, day, employee, amount, note? }` — one advance, JSON, no
+files. `employee` is a name, not an account; employees are not users of this
+app. **200** the created `AdvanceItem`. **422** on a closed day.
+
+### `PATCH /advances/{id}`
+Body: any of `{ employee, amount, note }`. **200** the updated `AdvanceItem`.
+**404** unknown id, **422** when the day is already deposited.
+
+### `DELETE /advances/{id}`
+**204.** Same already-deposited guard as update.
+
 ## Audit and deposits
 
 ### `GET /audits?storeIds=…&from=…&to=…`
 **200** `DayAudit[]` — one per store per day. `status` progresses
 `open` (today) → `pending` (audited, no deposit) → `matched` / `discrepancy`.
-`deposited`, `reference`, and `slipUrl` come from the covering deposit, null
-until one exists. Rows carry both `gross` and `profit`; the pages display
-profit, and `expected = profit - expenses` (the house rule) is the amount the
-covering deposit is matched against.
+`deposited`, `online`, `reference`, and `slipUrl` come from the covering
+deposit, null until one exists. Rows carry both `gross` and `profit`, plus
+the day's `expenses` and `advances` totals; the pages display profit, and
+`expected = profit - expenses - advances` (the house rule) is the amount the
+covering deposit's cash **plus its declared online money** is matched
+against.
+
+**A deposit covering several days repeats on every covered row**, so each row
+also carries the batch context that keeps that honest: `depositCovers` (every
+day the covering deposit spans — the whole batch, never clipped to the
+queried range) and `depositExpected` (the expected sum the deposit was judged
+against, frozen at recording; null on deposits from before it was stored).
+Any over/short figure a client shows must compare `deposited + online`
+against `depositExpected` — comparing a six-day deposit to one day's
+`expected` invents a wild over-deposit.
 
 **The ledger has a start day** (a backend setting, `audit_start_day`): days
 before it were settled in the world before this app existed. They carry no
@@ -302,6 +337,7 @@ covered days), newest first.
   "storeId": "arevalo",
   "day": "2026-08-04",
   "amount": 43110.5,
+  "online": 1500,
   "reference": "004512",
   "covers": ["2026-08-01", "2026-08-02"],
   "slipSha": "…hex…",
@@ -313,9 +349,17 @@ covered days), newest first.
 Files: one `slip` part (required), repeated `discrepancyProof` parts
 (optional).
 
-- `covers` must be pending days of that store; recording closes them.
-- `matched` is the backend's verdict: amount equals the covered days'
-  expected sum, compared in centavos.
+- `covers` must be pending days of that store; recording closes them. It may
+  span at most `batchWindowDays` days (the owner's reconciliation rule) —
+  more is **422** with `fields.days`.
+- `online` (optional, ≥ 0, default 0) is the manager's declaration of money
+  for the covered days that came in by GCash or bank transfer — sales that
+  never touched the drawer and so never reach a deposit slip. It is stored on
+  the deposit and echoed back on every `Deposit`.
+- `matched` is the backend's verdict: **`amount` plus `online`** equals the
+  covered days' expected sum, compared in centavos — an online sale must not
+  read as a shortfall, and declaring online money never waives the reason for
+  cash that is genuinely missing.
 - When they differ, `discrepancyReason` is **required** (**422** without it) —
   a mismatch can never be recorded silently. It is the one field a human must
   fill; do not accept blank or trivial strings.
@@ -323,8 +367,33 @@ Files: one `slip` part (required), repeated `discrepancyProof` parts
   absent. **Recompute the SHA-256 server-side** and enforce one-photo-one-
   deposit on your own hash: a duplicate is **409** with `fields.slip`. The
   client's values are hints for early UX, never authority.
+- The expected sum the deposit was judged against is **stored on the deposit**
+  (`Deposit.expected`) and echoed back, so the verdict can never drift from
+  the figures it was made on.
 
 **200** the created `Deposit`.
+
+## Push reminders
+
+Web push, signed with the app's VAPID pair (`VAPID_PUBLIC_KEY` /
+`VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` in the backend `.env`). The backend
+plans and sends on its scheduler — hourly, on each **branch's own clock**:
+an evening nudge when the till took money but no expense is logged, and a
+morning nudge when two or more audited days await a deposit (worded harder
+at and past the owner's batching window). Each reminder fires **once per
+day** per branch, to the **branch manager's** subscribed browsers; a mailbox
+the push service reports gone (404/410) is deleted on the spot.
+
+### `GET /push/key`
+**200** `{ key }` — the VAPID public key the browser subscribes with.
+
+### `POST /push/subscriptions`
+Body: the browser's `PushSubscription` — `{ endpoint, keys: { p256dh, auth } }`.
+**204.** Upserted by endpoint: the same browser re-subscribing under another
+account moves the mailbox — one endpoint never serves two accounts.
+
+### `DELETE /push/subscriptions`
+Body `{ endpoint }`. **204.** Only the mailbox's current holder may delete it.
 
 ## Settings (owner only)
 
@@ -343,7 +412,29 @@ deposit backlog against this window. `PATCH` stays owner-only.
 
 ### `PATCH /settings/reconciliation`
 Body `{ batchWindowDays: number }`, an integer 1–14. **204.** This drives the
-backlog warnings on the manager's Deposits page and dashboard.
+backlog warnings on the manager's Deposits page and dashboard, and it is
+**enforced on recording**: `POST /deposits` refuses (**422**, `fields.days`)
+a deposit whose `covers` spans more days than the window — a rule the owner
+dials, not a suggestion.
+
+### `GET /settings/sales-filter`
+**200** `FilteredItem[]` (`{ sku, name }`) — the items that never count
+toward gross and profit: services and labor, whose money is not the drawer's
+to deposit. The sync nets matching lines out of every receipt at ingest.
+
+### `PUT /settings/sales-filter`
+Body `{ items: FilteredItem[] }`, a whole-list replace (deduped by `sku`).
+**200** the saved list. When the SKU set actually changes, the backend
+**clears the stored receipts and the sync watermark** — the aggregates the
+old filter shaped cannot be recomputed, only re-pulled — and the scheduler's
+next tick rebuilds the backfill window. Same SKUs saved again touch nothing.
+
+### `GET /catalog/search?q=…`
+**200** up to 30 `FilteredItem` matches from the POS item catalog, matched
+against name and SKU (`q` is 2–80 chars, **422** below that). The backend
+walks the catalog once and caches it for `catalog_ttl`; the client never
+downloads the whole catalog. **503** with a human message when the POS
+cannot be reached.
 
 ## Not in this contract, on purpose
 

@@ -2,38 +2,27 @@ import { useEffect, useState } from "react"
 import { CalendarBlankIcon, FunnelIcon } from "@phosphor-icons/react"
 import { peso } from "../lib/format"
 import { api } from "../lib/api"
-import type { DayStatus } from "../lib/api"
 import { useApi } from "../lib/useApi"
-import { BranchTag, FilterSelect } from "../components/ui"
+import { BranchTag, FilterSelect, SegmentedTabs } from "../components/ui"
 import { Loading } from "../components/Loading"
 import { useManagerSession } from "../lib/session"
 import { StatCard } from "../components/StatCard"
 import type { Stat } from "../components/StatCard"
 import { Pagination } from "../components/Pagination"
-import { AUDIT_COLS, AuditHeader, AuditRow } from "../components/AuditRow"
+import { AUDIT_COLS, AuditEntry, AuditHeader } from "../components/AuditRow"
 import { ReceiptDialog } from "../components/ReceiptDialog"
 import type { ReceiptTarget } from "../components/ReceiptDialog"
-import { addDays, dayKey, fromDayKey, startOfDay } from "../lib/dateRange"
-
-type RangePreset = "last7" | "last30" | "last90" | "thisMonth" | "lastMonth" | "thisYear"
-type StatusFilter = "all" | DayStatus
-
-const RANGES: { value: RangePreset; label: string }[] = [
-  { value: "last7", label: "Last 7 days" },
-  { value: "last30", label: "Last 30 days" },
-  { value: "last90", label: "Last 90 days" },
-  { value: "thisMonth", label: "This month" },
-  { value: "lastMonth", label: "Last month" },
-  { value: "thisYear", label: "This year" },
-]
-
-const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "All statuses" },
-  { value: "matched", label: "Matched" },
-  { value: "discrepancy", label: "Discrepancy" },
-  { value: "pending", label: "Pending deposit" },
-  { value: "open", label: "Open" },
-]
+import { groupByDeposit, receiptTargetFor } from "../lib/historyGroups"
+import {
+  HISTORY_RANGES,
+  HISTORY_STATUS_OPTIONS,
+  HISTORY_TABS,
+  filterEntries,
+  countEntries,
+  presetBounds,
+} from "../lib/historyFilters"
+import type { HistoryTab, RangePreset, StatusFilter } from "../lib/historyFilters"
+import { addDays, dayKey, startOfDay } from "../lib/dateRange"
 
 const PAGE_SIZE = 20
 /* Safety bound on how far back one view will compute */
@@ -44,64 +33,37 @@ export default function HistoryPage() {
   const storeId = store.id
   const [preset, setPreset] = useState<RangePreset>("last30")
   const [status, setStatus] = useState<StatusFilter>("all")
+  const [tab, setTab] = useState<HistoryTab>("all")
   const [page, setPage] = useState(1)
   const [receipt, setReceipt] = useState<ReceiptTarget | null>(null)
 
   useEffect(() => {
     setPage(1)
-  }, [storeId, preset, status])
+  }, [storeId, preset, status, tab])
 
   const today = startOfDay(new Date())
-
-  let start: Date
-  let end: Date
-  switch (preset) {
-    case "last7":
-      start = addDays(today, -6)
-      end = today
-      break
-    case "last30":
-      start = addDays(today, -29)
-      end = today
-      break
-    case "last90":
-      start = addDays(today, -89)
-      end = today
-      break
-    case "thisMonth":
-      start = new Date(today.getFullYear(), today.getMonth(), 1)
-      end = today
-      break
-    case "lastMonth":
-      start = new Date(today.getFullYear(), today.getMonth() - 1, 1)
-      end = new Date(today.getFullYear(), today.getMonth(), 0)
-      break
-    case "thisYear":
-      start = new Date(today.getFullYear(), 0, 1)
-      end = today
-      break
-  }
+  const { start, end } = presetBounds(preset, today)
 
   /* One request for the whole range; the filters below are applied to what
      came back rather than sent as another query */
-  const from = dayKey(addDays(end, -(MAX_SCAN_DAYS - 1)) > start ? addDays(end, -(MAX_SCAN_DAYS - 1)) : start)
+  const floor = addDays(end, -(MAX_SCAN_DAYS - 1))
+  const from = dayKey(floor > start ? floor : start)
   const to = dayKey(end)
   const audits = useApi(() => api.dayAudits([storeId], { from, to }), [storeId, from, to])
 
-  // Newest first
-  const allRows = [...(audits.data ?? [])]
-    .sort((a, b) => (a.day < b.day ? 1 : -1))
-    .map((audit) => ({ date: fromDayKey(audit.day), audit }))
-  const rows = allRows.filter((r) => status === "all" || r.audit.status === status)
+  // Newest first; days one deposit covers fold into a single line
+  const allAudits = [...(audits.data ?? [])].sort((a, b) => (a.day < b.day ? 1 : -1))
+  const entries = groupByDeposit(allAudits)
+  const rows = filterEntries(entries, tab, status)
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
   const pageRows = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
-  // Counted across the whole range, so the summary holds while filtering
-  const counts = { matched: 0, discrepancy: 0, pending: 0, open: 0 }
-  for (const r of allRows) counts[r.audit.status]++
-  const expectedTotal = allRows.reduce((sum, r) => sum + r.audit.expected, 0)
+  /* Counted across the whole range, so the summary holds while filtering.
+     A batch deposit counts once — deposits reconciled, not days spanned. */
+  const counts = countEntries(entries)
+  const expectedTotal = allAudits.reduce((sum, a) => sum + a.expected, 0)
 
   const storeName = store.name
 
@@ -129,12 +91,19 @@ export default function HistoryPage() {
       >
         <BranchTag name={store.name} />
 
+        <SegmentedTabs
+          ariaLabel="Reconciliation state"
+          value={tab}
+          onChange={setTab}
+          options={HISTORY_TABS}
+        />
+
         <FilterSelect
           ariaLabel="Date range"
           icon={<CalendarBlankIcon size={15} weight="bold" aria-hidden="true" />}
           value={preset}
           onChange={(v) => setPreset(v as RangePreset)}
-          options={RANGES}
+          options={HISTORY_RANGES}
         />
 
         <FilterSelect
@@ -142,7 +111,7 @@ export default function HistoryPage() {
           icon={<FunnelIcon size={15} weight="bold" aria-hidden="true" />}
           value={status}
           onChange={(v) => setStatus(v as StatusFilter)}
-          options={STATUS_OPTIONS}
+          options={HISTORY_STATUS_OPTIONS}
         />
       </div>
 
@@ -183,13 +152,12 @@ export default function HistoryPage() {
         ) : (
           <>
             <ul className="divide-y divide-line">
-              {pageRows.map(({ date, audit }) => (
-                <AuditRow
-                  key={dayKey(date)}
-                  date={date}
-                  audit={audit}
+              {pageRows.map((entry) => (
+                <AuditEntry
+                  key={entry.key}
+                  entry={entry}
                   cols={AUDIT_COLS}
-                  onViewReceipt={() => setReceipt({ date, branchName: storeName, audit })}
+                  onViewReceipt={() => setReceipt(receiptTargetFor(entry, storeName))}
                 />
               ))}
             </ul>

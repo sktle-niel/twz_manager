@@ -15,6 +15,7 @@ import HistoryPage from "./pages/HistoryPage"
 import LoginPage from "./pages/LoginPage"
 import AdminHistoryPage from "./pages/AdminHistoryPage"
 import AdminManagersPage from "./pages/AdminManagersPage"
+import AdminSalesFilterPage from "./pages/AdminSalesFilterPage"
 import AdminSettingsPage from "./pages/AdminSettingsPage"
 import AdminAccountPage from "./pages/AdminAccountPage"
 
@@ -54,6 +55,7 @@ function App() {
               <Route index element={<AdminOverviewPage />} />
               <Route path="history" element={<AdminHistoryPage />} />
               <Route path="managers" element={<AdminManagersPage />} />
+              <Route path="sales-filter" element={<AdminSalesFilterPage />} />
               <Route path="settings" element={<AdminSettingsPage />} />
               <Route path="account" element={<AdminAccountPage />} />
             </Route>

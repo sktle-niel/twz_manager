@@ -89,6 +89,14 @@ Rules that matter for the daily total:
   Bucket days by `receipt_date` in the **store's own timezone**, not UTC. A sale at 11pm in
   Iloilo is 3pm UTC the same day, but the day boundary must be the branch's, or every
   late-evening sale lands on the wrong audit day.
+- **Services and labor are not sales.** The shop's SERVICES & LABOR items (labor charges,
+  diagnostics, cleaning packages — the excluded-SKU list lives in the backend's
+  `sales_excluded_skus` setting, seeded with the owner's 24-item price-list grouping) are
+  netted out of each receipt's gross and cost at ingest, by matching each line's `sku`.
+  That money never sits in the drawer as parts takings, so counting it would raise every
+  expected-deposit figure the reconciliation checks. The receipts table stores aggregates,
+  so changing the list needs a re-pull (clear the watermark and receipts) to recompute
+  the past.
 
 ### Mapping branches
 

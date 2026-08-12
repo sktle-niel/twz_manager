@@ -125,6 +125,37 @@ export type ExpensePatch = {
   receipts?: { keep: string[]; add: File[] }
 }
 
+/**
+ * Cash an employee drew from the drawer against their pay. Not an expense —
+ * the shop gets it back — but on the day it is drawn the cash is gone all
+ * the same, so the ledger nets it out of that day's expected deposit.
+ */
+export type AdvanceItem = {
+  id: string
+  storeId: string
+  day: DayKey
+  /** The employee's name — employees are not accounts in this app */
+  employee: string
+  amount: number
+  note: string
+  /** ISO 8601 instant of when it was logged */
+  at: string
+}
+
+export type NewAdvance = {
+  storeId: string
+  day: DayKey
+  employee: string
+  amount: number
+  note?: string
+}
+
+export type AdvancePatch = {
+  employee?: string
+  amount?: number
+  note?: string
+}
+
 export type HourPoint = {
   /** 24-hour clock in the branch's timezone */
   hour: number
@@ -158,10 +189,21 @@ export type DayAudit = {
   /** Gross minus what the goods cost: the figure the audit pages show */
   profit: number
   expenses: number
-  /** profit - expenses: the amount the bank slip must match (house rule) */
+  /** Cash advances drawn against pay that day — out of the drawer like spend */
+  advances: number
+  /** profit - expenses - advances: what the deposit must answer (house rule) */
   expected: number
-  /** Null until a deposit covers the day */
+  /** Cash on the covering deposit's slip; null until a deposit covers the day */
   deposited: number | null
+  /** GCash / bank-transfer money declared on the covering deposit — counted
+      with the cash when the match was judged; null until a deposit exists */
+  online: number | null
+  /** Every day the covering deposit spans — the whole batch, not just this
+      row — so one deposit over six days is never read as six over-deposits */
+  depositCovers: DayKey[] | null
+  /** The expected sum that deposit was judged against, frozen at recording;
+      null before a deposit, or on deposits from before this was stored */
+  depositExpected: number | null
   /** Bank reference of the covering deposit */
   reference: string | null
   /** Slip photo of the covering deposit; null until one exists */
@@ -174,12 +216,20 @@ export type Deposit = {
   storeId: string
   /** The day the deposit was made, not the days it covers */
   day: DayKey
+  /** Cash on the bank slip */
   amount: number
+  /** Money for the covered days that came in through GCash or bank transfer
+      and never touched the drawer — declared, so it does not read as short */
+  online: number
+  /** The expected sum over the covered days, frozen when the deposit was
+      judged; null on deposits recorded before this was stored */
+  expected: number | null
   reference: string
   /** Audited days this one deposit closes, oldest first */
   covers: DayKey[]
   /** The stored slip photo */
   slipUrl: string
+  /** Cash plus online against the expected total, judged in centavos */
   matched: boolean
 }
 
@@ -187,6 +237,8 @@ export type NewDeposit = {
   storeId: string
   day: DayKey
   amount: number
+  /** GCash / bank-transfer money for the covered days; omitted means none */
+  online?: number
   reference: string
   covers: DayKey[]
   slip: File
@@ -203,6 +255,16 @@ export type NewDeposit = {
     reason: string
     proof: File[]
   }
+}
+
+/**
+ * One item the sales filter excludes from gross and profit — services and
+ * labor, whose money is not the drawer's to deposit. `name` may be empty on
+ * entries saved before names were stored; show the SKU then.
+ */
+export type FilteredItem = {
+  sku: string
+  name: string
 }
 
 export type SignInDeviceKind = "phone" | "computer"

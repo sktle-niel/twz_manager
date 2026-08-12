@@ -2,6 +2,7 @@ import { useRef } from "react"
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import {
   ClockCounterClockwiseIcon,
+  FunnelIcon,
   GearIcon,
   SignOutIcon,
   SquaresFourIcon,
@@ -21,12 +22,13 @@ const NAV: { to: string; label: string; icon: Icon; end?: boolean }[] = [
   { to: "/admin", label: "Overview", icon: SquaresFourIcon, end: true },
   { to: "/admin/history", label: "History", icon: ClockCounterClockwiseIcon },
   { to: "/admin/managers", label: "Managers", icon: UsersThreeIcon },
+  { to: "/admin/sales-filter", label: "Sales filter", icon: FunnelIcon },
   { to: "/admin/settings", label: "Settings", icon: GearIcon },
   { to: "/admin/account", label: "Account", icon: UserCircleIcon },
 ]
 
-/* Mobile: Account lives in the top bar, the other four fill the bottom tab bar */
-const MOBILE_TABS = NAV.slice(0, 4)
+/* Mobile: Account lives in the top bar, the other five fill the bottom tab bar */
+const MOBILE_TABS = NAV.slice(0, 5)
 
 export default function AdminShell() {
   const { showToast } = useToast()
@@ -160,7 +162,12 @@ export default function AdminShell() {
         aria-label="Primary"
         className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
-        <div className="grid h-16 grid-cols-4">
+        {/* Columns follow the tab count — a hardcoded grid-cols-4 once left a
+            fifth tab wrapping onto a second row */}
+        <div
+          className="grid h-16"
+          style={{ gridTemplateColumns: `repeat(${MOBILE_TABS.length}, minmax(0, 1fr))` }}
+        >
           {MOBILE_TABS.map((item) => (
             <MobileTab key={item.to} {...item} />
           ))}

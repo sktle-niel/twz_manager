@@ -25,7 +25,9 @@ import { addDays, dayKey, fromDayKey, startOfDay } from "../dateRange"
 import { ApiError } from "./client"
 import type { DayRange, Session, TwzApi } from "./contracts"
 import type {
+  AdvanceItem,
   DailySales,
+  FilteredItem,
   DayAudit,
   DayKey,
   DayStatus,
@@ -162,6 +164,51 @@ const addedExpenses = new Map<string, ExpenseItem[]>()
 const removedExpenses = new Set<string>()
 const editedExpenses = new Map<string, Partial<ExpenseItem>>()
 const recordedDeposits = new Map<string, Deposit[]>()
+/* Cash advances live entirely in the session — the sample seeds none, so a
+   fresh visit shows the common case of a day without one */
+const sessionAdvances = new Map<string, AdvanceItem[]>()
+
+/* The sales filter: services & labor items that never count toward gross
+   and profit. Seeded with the shop's real price-list grouping. */
+let filteredItems: FilteredItem[] = [
+  { sku: "11898", name: "BATTERY CHARGE" },
+  { sku: "10943", name: "BRAKE MASTER REPAIR XRM" },
+  { sku: "11370", name: "Cylinder Block services" },
+  { sku: "11567", name: "ECU DIAGNOSTIC RESET" },
+  { sku: "11084", name: "ECU RESET DIAGNOSTIC TOOL" },
+  { sku: "19181", name: "FWZ DIAGNOSTIC SCANNING" },
+  { sku: "19219", name: "FWZ EGR CLEANING" },
+  { sku: "19105", name: "FWZ GENERAL AIRCON CLEANING PACKAGE" },
+  { sku: "19220", name: "FWZ INTAKE MANIFOLD" },
+  { sku: "19143", name: "FWZ LABOR" },
+  { sku: "19160", name: "FWZ OIL COMPRESSOR REFRIGERANT" },
+  { sku: "19106", name: "FWZ REFRIGERANT REFIL" },
+  { sku: "17137", name: "LABOR" },
+  { sku: "11083", name: "LABOR CHARGE 100" },
+  { sku: "15822", name: "LABOR CHARGE PACKAGE MDL & PIAA" },
+  { sku: "15823", name: "LABOR CHARGE PACKAGE MDL ONLY" },
+  { sku: "15824", name: "LABOR CHARGE PACKAGE PIAA HORN ONLY" },
+  { sku: "12065", name: "Machine charge" },
+  { sku: "14429", name: "REMAPING PACKAGES CVT & Fi CLEANING" },
+  { sku: "14558", name: "TRANSPORTATION SERVICES" },
+  { sku: "10812", name: "WHEEL ALIGNMENT" },
+  { sku: "17907", name: "WS DIAGNOSTIC TOOL JDIAG M100" },
+  { sku: "17885", name: "WS FEELER GUAGE" },
+  { sku: "17883", name: "WS TORX KEY/REPAIR TOOL" },
+]
+
+/* A slice of the catalog, enough for the search to feel real */
+const SAMPLE_CATALOG: FilteredItem[] = [
+  ...filteredItems,
+  { sku: "20077", name: "BRAKE PAD NMAX" },
+  { sku: "20114", name: "BRAKE SHOE MIO" },
+  { sku: "30001", name: "ENGINE OIL — 1L" },
+  { sku: "30002", name: "ENGINE OIL — 4L" },
+  { sku: "30150", name: "CHAIN LUBE 400ML" },
+  { sku: "31220", name: "SPARK PLUG NGK C6HSA" },
+  { sku: "31877", name: "TIRE 80/90-14 TUBELESS" },
+  { sku: "32410", name: "BATTERY MOTOLITE MF5L" },
+]
 /** Days closed by a deposit recorded this session */
 const clearedDays = new Set<string>()
 /** Slip fingerprints of deposits recorded this session — the server-side half
@@ -357,6 +404,14 @@ function expenseTotal(storeId: string, day: DayKey): number {
   return expensesFor(storeId, day).reduce((sum, i) => sum + i.amount, 0)
 }
 
+function advancesFor(storeId: string, day: DayKey): AdvanceItem[] {
+  return sessionAdvances.get(`${storeId}:${day}`) ?? []
+}
+
+function advanceTotal(storeId: string, day: DayKey): number {
+  return advancesFor(storeId, day).reduce((sum, a) => sum + a.amount, 0)
+}
+
 function referenceFor(storeId: string, key: string): string {
   return String(Math.floor(mulberry32(hashSeed(`ref:${storeId}:${key}`))() * 1_000_000)).padStart(
     6,
@@ -368,23 +423,32 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
   const gross = grossFor(storeId, day)
   const profit = Math.round(gross * marginFor(day) * 100) / 100
   const expenses = expenseTotal(storeId, day)
+  const advances = advanceTotal(storeId, day)
   /* The house rule: what goes to the bank is profit minus the day's spend —
-     the capital share of the takings stays in the shop to restock */
-  const expected = Math.round((profit - expenses) * 100) / 100
+     the capital share of the takings stays in the shop to restock. Advances
+     net out too: that cash left the drawer, whoever pays it back later. */
+  const expected = Math.round((profit - expenses - advances) * 100) / 100
   const diff = daysBack(day)
-  const base = { storeId, day, gross, profit, expenses, expected }
+  const base = { storeId, day, gross, profit, expenses, advances, expected }
+
+  /* Seeded history has no covering-deposit record to point at, so its rows
+     carry no batch fields — only a deposit recorded this session does */
+  const uncovered = { depositCovers: null, depositExpected: null }
 
   if (diff <= 0)
-    return { ...base, deposited: null, reference: null, slipUrl: null, status: "open" }
+    return { ...base, deposited: null, online: null, ...uncovered, reference: null, slipUrl: null, status: "open" }
 
   if (diff <= DEPOSIT_TIMELINE.pendingThrough) {
     if (!clearedDays.has(`${storeId}:${day}`))
-      return { ...base, deposited: null, reference: null, slipUrl: null, status: "pending" }
+      return { ...base, deposited: null, online: null, ...uncovered, reference: null, slipUrl: null, status: "pending" }
     // Closed by a deposit recorded this session, whose slip photo we hold
     const covering = (recordedDeposits.get(storeId) ?? []).find((d) => d.covers.includes(day))
     return {
       ...base,
-      deposited: expected,
+      deposited: covering?.amount ?? expected,
+      online: covering?.online ?? 0,
+      depositCovers: covering ? [...covering.covers] : null,
+      depositExpected: covering?.expected ?? null,
       reference: covering?.reference ?? referenceFor(storeId, day),
       slipUrl: covering?.slipUrl ?? null,
       status: covering && !covering.matched ? "discrepancy" : "matched",
@@ -395,6 +459,8 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
     return {
       ...base,
       deposited: expected - DEPOSIT_TIMELINE.shortfall,
+      online: 0,
+      ...uncovered,
       reference: referenceFor(storeId, day),
       slipUrl: SAMPLE_PHOTO,
       status: "discrepancy",
@@ -407,6 +473,8 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
     return {
       ...base,
       deposited: expected,
+      online: 0,
+      ...uncovered,
       reference: referenceFor(storeId, `pair:${newer}`),
       slipUrl: SAMPLE_PHOTO,
       status: "matched",
@@ -420,12 +488,14 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
     return {
       ...base,
       deposited: expected - shortfall,
+      online: 0,
+      ...uncovered,
       reference,
       slipUrl: SAMPLE_PHOTO,
       status: "discrepancy" as DayStatus,
     }
   }
-  return { ...base, deposited: expected, reference, slipUrl: SAMPLE_PHOTO, status: "matched" }
+  return { ...base, deposited: expected, online: 0, ...uncovered, reference, slipUrl: SAMPLE_PHOTO, status: "matched" }
 }
 
 function eachDay(range: DayRange): DayKey[] {
@@ -743,6 +813,57 @@ export const sampleApi: TwzApi = {
     return settle([...categories])
   },
 
+  advances: (storeId, range) =>
+    settle(eachDay(range).flatMap((day) => advancesFor(storeId, day))),
+
+  addAdvance: (input) => {
+    if (!input.employee.trim()) return fail(422, "Say whose advance this is.")
+    if (!(input.amount > 0)) return fail(422, "An advance needs an amount above zero.")
+    const advance: AdvanceItem = {
+      id: `adv-${Date.now().toString(36)}`,
+      storeId: input.storeId,
+      day: input.day,
+      employee: input.employee.trim(),
+      amount: input.amount,
+      note: input.note?.trim() ?? "",
+      at: new Date().toISOString(),
+    }
+    const key = `${input.storeId}:${input.day}`
+    sessionAdvances.set(key, [...(sessionAdvances.get(key) ?? []), advance])
+    return settle(advance)
+  },
+
+  updateAdvance: (id, patch) => {
+    for (const [key, list] of sessionAdvances) {
+      const hit = list.find((a) => a.id === id)
+      if (!hit) continue
+      const next = {
+        ...hit,
+        ...(patch.employee !== undefined ? { employee: patch.employee.trim() } : {}),
+        ...(patch.amount !== undefined ? { amount: patch.amount } : {}),
+        ...(patch.note !== undefined ? { note: patch.note.trim() } : {}),
+      }
+      sessionAdvances.set(
+        key,
+        list.map((a) => (a.id === id ? next : a)),
+      )
+      return settle(next)
+    }
+    return fail(404, "That advance is no longer there.")
+  },
+
+  deleteAdvance: (id) => {
+    for (const [key, list] of sessionAdvances) {
+      if (list.some((a) => a.id === id)) {
+        sessionAdvances.set(
+          key,
+          list.filter((a) => a.id !== id),
+        )
+      }
+    }
+    return settle(undefined)
+  },
+
   dayAudits: (storeIds, range) =>
     settle(storeIds.flatMap((id) => eachDay(range).map((day) => auditFor(id, day)))),
 
@@ -771,6 +892,15 @@ export const sampleApi: TwzApi = {
       return fail(422, "Check the highlighted fields.", { reference: "Enter the reference number." })
     if (input.covers.length === 0)
       return fail(422, "Select at least one day this deposit covers.")
+    // The owner's batching window is enforced, exactly like the real backend
+    if (input.covers.length > rules.batchWindowDays) {
+      const extra = input.covers.length - rules.batchWindowDays
+      return fail(
+        422,
+        `One deposit may cover at most ${rules.batchWindowDays} ${rules.batchWindowDays === 1 ? "day" : "days"}.`,
+        { days: `Unselect ${extra} ${extra === 1 ? "day" : "days"}, or record this as more than one deposit.` },
+      )
+    }
     const duplicate =
       input.slipSha &&
       [...recordedDeposits.values()].flat().some((d) => slipShas.get(d.id) === input.slipSha)
@@ -783,20 +913,46 @@ export const sampleApi: TwzApi = {
       (sum, day) => sum + auditFor(input.storeId, day).expected,
       0,
     )
+    const online = input.online ?? 0
     const deposit: Deposit = {
       id: `dep-${Date.now().toString(36)}`,
       storeId: input.storeId,
       day: input.day,
       amount: input.amount,
+      online,
+      expected: Math.round(expected * 100) / 100,
       reference: input.reference,
       covers: [...input.covers],
       slipUrl: URL.createObjectURL(input.slip),
-      matched: Math.round(input.amount * 100) === Math.round(expected * 100),
+      // Cash on the slip plus what came in online, like the real backend
+      matched:
+        Math.round(input.amount * 100) + Math.round(online * 100) === Math.round(expected * 100),
     }
     if (input.slipSha) slipShas.set(deposit.id, input.slipSha)
     recordedDeposits.set(input.storeId, [deposit, ...(recordedDeposits.get(input.storeId) ?? [])])
     input.covers.forEach((day) => clearedDays.add(`${input.storeId}:${day}`))
     return settle(deposit)
+  },
+
+  /* Push in sample mode: accepted and forgotten — there is no server to send */
+  pushKey: () => settle("sample-mode-has-no-vapid-key"),
+  savePushSubscription: () => settle(undefined),
+  deletePushSubscription: () => settle(undefined),
+
+  salesFilter: () => settle([...filteredItems]),
+  saveSalesFilter: (items) => {
+    const unique = new Map(items.map((i) => [i.sku.trim(), { sku: i.sku.trim(), name: i.name.trim() }]))
+    filteredItems = [...unique.values()].filter((i) => i.sku !== "")
+    return settle([...filteredItems])
+  },
+  searchCatalog: (q) => {
+    const needle = q.trim().toLowerCase()
+    if (needle.length < 2) return fail(422, "Type at least two characters to search.")
+    return settle(
+      SAMPLE_CATALOG.filter(
+        (i) => i.name.toLowerCase().includes(needle) || i.sku.includes(needle),
+      ).slice(0, 30),
+    )
   },
 
   posConnection: () =>

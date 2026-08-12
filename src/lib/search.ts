@@ -171,10 +171,15 @@ export async function buildCorpus(scope: SearchScope, today: Date): Promise<Sear
       const key = audit.day
       const words = dateWords(d)
       const status = STATUS_LABEL[audit.status]
+      // Cash plus declared online money is what answers the judged figure —
+      // the deposit's whole batch when it covers several days
+      const answered =
+        audit.deposited === null ? null : audit.deposited + (audit.online ?? 0)
+      const judged =
+        audit.depositExpected ??
+        ((audit.depositCovers?.length ?? 0) > 1 ? null : audit.expected)
       const shortfall =
-        audit.deposited !== null && audit.deposited < audit.expected
-          ? audit.expected - audit.deposited
-          : 0
+        answered !== null && judged !== null && answered < judged ? judged - answered : 0
 
       records.push({
         id: `day-${store.id}-${key}`,
