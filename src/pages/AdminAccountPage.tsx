@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom"
 import { SignOutIcon } from "@phosphor-icons/react"
 import { FormField, inputBad, inputBase, inputOk } from "../components/ui"
 import { ChangePasswordCard } from "../components/ChangePasswordCard"
+import { InstallCard } from "../components/InstallCard"
 import { AvatarField } from "../components/AvatarField"
 import { SignInCard } from "../components/SignInCard"
 import { ApiError, api } from "../lib/api"
@@ -139,6 +140,9 @@ export default function AdminAccountPage() {
       </section>
 
         <ChangePasswordCard />
+
+        {/* Renders only in a browser tab — inside the installed app it's moot */}
+        <InstallCard />
 
         {/* Session */}
         <section

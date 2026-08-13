@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import AppShell from "./components/AppShell"
 import AdminShell from "./components/AdminShell"
 import { ConnectionToasts } from "./components/ConnectionToasts"
+import { InstallBanner } from "./components/InstallBanner"
 import { Loading } from "./components/Loading"
 import { RequireManager, RequireOwner } from "./components/RequireRole"
 import { ScrollToTop } from "./components/ScrollToTop"
@@ -32,6 +33,8 @@ function App() {
         {/* One listener turns connection trouble into words, app-wide */}
         <ConnectionToasts />
         <SessionProvider>
+        {/* Watches for a fresh sign-in on an uninstalled device — 30s nudge */}
+        <InstallBanner />
         <Suspense
           fallback={
             <div className="flex min-h-[100dvh] items-center justify-center">
