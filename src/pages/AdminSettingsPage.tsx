@@ -378,7 +378,7 @@ export default function AdminSettingsPage() {
         </p>
       </div>
 
-      <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
         {/* Branches */}
         <SettingCard
         icon={StorefrontIcon}

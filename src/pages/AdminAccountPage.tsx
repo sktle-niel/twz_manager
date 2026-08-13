@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom"
 import { SignOutIcon } from "@phosphor-icons/react"
 import { FormField, inputBad, inputBase, inputOk } from "../components/ui"
 import { ChangePasswordCard } from "../components/ChangePasswordCard"
+import { InstallCard } from "../components/InstallCard"
 import { AvatarField } from "../components/AvatarField"
 import { SignInCard } from "../components/SignInCard"
 import { ApiError, api } from "../lib/api"
@@ -73,7 +74,7 @@ export default function AdminAccountPage() {
         <p className="mt-0.5 text-[13px] text-mute">Your owner profile and sign-in details.</p>
       </div>
 
-      <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
         {/* Profile */}
         <section
           className="rounded-xl border border-line bg-surface p-5 sm:p-6"
@@ -139,6 +140,9 @@ export default function AdminAccountPage() {
       </section>
 
         <ChangePasswordCard />
+
+        {/* Renders only in a browser tab — inside the installed app it's moot */}
+        <InstallCard />
 
         {/* Session */}
         <section

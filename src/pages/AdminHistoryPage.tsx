@@ -139,7 +139,7 @@ export default function AdminHistoryPage() {
       </div>
 
       {/* Reconciliation table, paired with the summary rail on wide screens */}
-      <div className="mt-5 grid items-start gap-5 xl:grid-cols-[2fr_1fr]">
+      <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <section
           className="rounded-xl border border-line bg-surface"
           data-rise

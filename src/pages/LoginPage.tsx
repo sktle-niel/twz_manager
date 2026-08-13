@@ -110,7 +110,7 @@ export default function LoginPage() {
     "border-claret/60 focus:border-claret focus:shadow-[0_0_0_2px_rgba(179,57,47,0.8)]"
 
   return (
-    <main ref={scopeRef} className="relative min-h-[100dvh] lg:grid lg:grid-cols-[1.05fr_1fr]">
+    <main ref={scopeRef} className="relative min-h-[100dvh] lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
       {/* Mobile: the crew as a faint backdrop behind the card. The card's own
           surface is opaque, so the art frames the form without touching its
           legibility; the fixed layer sits under the canvas-level content. */}
