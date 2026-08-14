@@ -1,6 +1,6 @@
 import { useState } from "react"
 import type { SubmitEvent } from "react"
-import { KeyIcon, LockIcon, LockOpenIcon, StorefrontIcon } from "@phosphor-icons/react"
+import { KeyIcon, LockIcon, LockOpenIcon, PowerIcon, StorefrontIcon } from "@phosphor-icons/react"
 import { ApiError, api } from "../lib/api"
 import type { Manager } from "../lib/api"
 import { useApi } from "../lib/useApi"
@@ -22,6 +22,7 @@ function ManagerRow({
   onToggleLock,
   onBranchChange,
   onToggleReset,
+  onToggleActive,
 }: {
   manager: Manager
   /* Every branch: their own, the free ones, and occupied ones (which swap) */
@@ -31,6 +32,7 @@ function ManagerRow({
   onToggleLock: () => void
   onBranchChange: (storeId: string) => void
   onToggleReset: () => void
+  onToggleActive: () => void
 }) {
   return (
     /*
@@ -68,6 +70,28 @@ function ManagerRow({
           disabled={locked}
           className="min-w-0 flex-1 sm:w-44 sm:flex-none"
         />
+        <button
+          type="button"
+          onClick={onToggleActive}
+          disabled={locked}
+          aria-label={
+            manager.active
+              ? `Disable the account of ${manager.name}`
+              : `Re-enable the account of ${manager.name}`
+          }
+          title={
+            locked
+              ? "Unlock the row to change this"
+              : manager.active
+                ? "Disable this account"
+                : "Re-enable this account"
+          }
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ease-quiet hover:bg-black/[0.04] disabled:pointer-events-none disabled:opacity-40 ${
+            manager.active ? "text-mute hover:text-claret" : "text-claret"
+          }`}
+        >
+          <PowerIcon size={16} weight="bold" aria-hidden="true" />
+        </button>
         <button
           type="button"
           onClick={onToggleReset}
@@ -252,6 +276,23 @@ export default function AdminManagersPage() {
   // Keep the issue-form choice valid as branches fill up
   const issueBranch = freeStores.some((s) => s.id === branch) ? branch : freeStores[0]?.id ?? ""
 
+  async function toggleActive(manager: Manager) {
+    if (isLocked(manager.id)) return
+    try {
+      // The revocation is the server's: sessions, remembered devices, mailboxes
+      await api.setManagerActive(manager.id, !manager.active)
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "That did not go through.")
+      return
+    }
+    loaded.reload()
+    showToast(
+      manager.active
+        ? `${manager.name}'s account is disabled — they are signed out everywhere.`
+        : `${manager.name}'s account is back on.`,
+    )
+  }
+
   async function reassign(manager: Manager, storeId: string) {
     if (isLocked(manager.id) || storeId === manager.storeId) return
     const holder = managers.find((m) => m.id !== manager.id && m.storeId === storeId)
@@ -334,6 +375,7 @@ export default function AdminManagersPage() {
             <p className="mt-0.5 text-[13px] text-mute">
               Each row is locked by default. Tap the lock to reassign. Picking a branch already held
               swaps the two managers. The key sets a new password for a manager who is locked out.
+              The power button disables an account without deleting it — unlock the row first.
             </p>
           </div>
           {loaded.error ? (
@@ -359,6 +401,7 @@ export default function AdminManagersPage() {
                     onToggleLock={() => toggleLock(m.id)}
                     onBranchChange={(storeId) => void reassign(m, storeId)}
                     onToggleReset={() => setResettingId(resettingId === m.id ? null : m.id)}
+                    onToggleActive={() => void toggleActive(m)}
                   />
                   {resettingId === m.id && (
                     <ResetPanel

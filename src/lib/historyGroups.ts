@@ -1,5 +1,30 @@
-import type { DayAudit } from "./api"
+import type { DayAudit, DayStatus } from "./api"
 import { fromDayKey } from "./dateRange"
+
+/** A status as the History surfaces paint it: "over" is a discrepancy where
+    the extra went IN — good news wearing green instead of red */
+export type PaintedStatus = DayStatus | "over"
+
+/**
+ * How far a covering deposit ran OVER what it was judged against, in pesos.
+ * Zero when short, matched, no deposit, or on old batches whose judged sum
+ * was never stored — those cannot honestly claim either direction.
+ */
+export function depositOverage(audit: DayAudit): number {
+  if (audit.deposited === null) return 0
+  const judged =
+    audit.depositExpected ?? ((audit.depositCovers?.length ?? 0) > 1 ? null : audit.expected)
+  if (judged === null) return 0
+  const cents =
+    Math.round(audit.deposited * 100) +
+    Math.round((audit.online ?? 0) * 100) -
+    Math.round(judged * 100)
+  return cents > 0 ? cents / 100 : 0
+}
+
+export function paintedStatus(audit: DayAudit): PaintedStatus {
+  return audit.status === "discrepancy" && depositOverage(audit) > 0 ? "over" : audit.status
+}
 
 /* One History line: a lone day, or every visible day one deposit covers */
 export type HistoryEntry = {

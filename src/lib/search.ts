@@ -1,33 +1,22 @@
 /*
- * The index behind the global search. Everything the app knows about — audited
- * days, individual expenses, deposits, and (for the owner) accounts and
- * branches — is flattened into records that carry one lowercase `haystack`
- * string each.
- *
- * Matching is deliberately one mechanism rather than a mode per field: every
- * token in the query must appear somewhere in the haystack. Because each
- * record's haystack already spells its date several ways, its amounts as bare
- * digits, and its own kind, a single rule covers "july 3 2026", "meals
- * arevalo", "712063", and "discrepancy july" without the caller choosing.
- *
- * The one thing substring matching cannot do is understand "7/3/2026", so a
- * date hint is parsed alongside it and matched against the record's own date.
+ * The presentation half of the global search. The matching itself lives on
+ * the backend now (GET /search, docs/API.md): every token must appear
+ * somewhere in a record's haystack, and a recognised date narrows by the
+ * record's own day. What comes back are raw wire shapes, grouped and capped
+ * with true totals — this file turns them into the records the overlay
+ * renders, and keeps the query-parsing helpers the sample adapter still
+ * mirrors the server with.
  */
 import { clockLabel, peso, rowDate, shortDate } from "./format"
-import { api } from "./api"
-import type { DayAudit, DayStatus, ExpenseItem, Manager, Store } from "./api"
-import { addDays, dayKey, fromDayKey, startOfDay } from "./dateRange"
+import type { DayStatus, Deposit, ExpenseItem, Manager, SearchResults, Store } from "./api/types"
+import { fromDayKey } from "./dateRange"
 
-/* Matches the History page's longest range, so the two agree on how far back
-   "everything" reaches. The whole corpus is built in one pass when the overlay
-   opens, so this is also what keeps that pass cheap. */
+/* What the backend's window covers, so the overlay can say it out loud.
+   Kept in lockstep with the server's GlobalSearch::WINDOW_DAYS. */
 export const WINDOW_DAYS = 90
 
-/* Below this a query matches most of the corpus and the list is noise */
+/* Below this the backend answers 422, so the overlay does not even ask */
 export const SEARCH_MIN = 2
-
-/* Per group; the rest are counted rather than listed */
-const PER_GROUP = 6
 
 export type SearchKind = "day" | "expense" | "deposit" | "manager" | "branch"
 
@@ -39,9 +28,7 @@ export const KIND_LABEL: Record<SearchKind, string> = {
   branch: "Branches",
 }
 
-const KIND_ORDER: SearchKind[] = ["day", "expense", "deposit", "manager", "branch"]
-
-const STATUS_LABEL: Record<DayStatus, string> = {
+export const STATUS_LABEL: Record<DayStatus, string> = {
   open: "Open",
   pending: "Pending deposit",
   matched: "Matched",
@@ -59,19 +46,14 @@ export type SearchRecord = {
   details: DetailRow[]
   to: string
   toLabel: string
-  /* The record's own day, for date matching and recency order; 0 when it has
-     no date of its own, like an account */
-  at: number
-  haystack: string
 }
 
 export type SearchRoutes = Record<SearchKind, { to: string; label: string }>
 
 export type SearchScope = {
-  storeIds: string[]
+  /* The branches the caller may see; names label the records client-side */
+  stores: Store[]
   routes: SearchRoutes
-  /* Accounts and branches are the owner's to see; a manager gets neither */
-  includeAccounts: boolean
 }
 
 export const MANAGER_ROUTES: SearchRoutes = {
@@ -92,6 +74,223 @@ export const OWNER_ROUTES: SearchRoutes = {
   branch: { to: "/admin/settings", label: "Open in Settings" },
 }
 
+export type SearchGroup = {
+  kind: SearchKind
+  label: string
+  items: SearchRecord[]
+  /* Everything that matched, so a truncated group can say how much it is hiding */
+  total: number
+}
+
+/** Turns the backend's grouped wire shapes into the records the overlay renders */
+export function buildGroups(results: SearchResults, scope: SearchScope): SearchGroup[] {
+  const name = (storeId: string) =>
+    scope.stores.find((s) => s.id === storeId)?.name ?? storeId
+  const { routes } = scope
+
+  const groups: SearchGroup[] = [
+    {
+      kind: "day",
+      label: KIND_LABEL.day,
+      total: results.days.total,
+      items: results.days.items.map((audit) => {
+        const d = fromDayKey(audit.day)
+        const answered =
+          audit.deposited === null ? null : audit.deposited + (audit.online ?? 0)
+        const judged =
+          audit.depositExpected ??
+          ((audit.depositCovers?.length ?? 0) > 1 ? null : audit.expected)
+        const shortfall =
+          answered !== null && judged !== null && answered < judged ? judged - answered : 0
+        const overage =
+          answered !== null && judged !== null && answered > judged ? answered - judged : 0
+        /* Over is a discrepancy on the wire, but it wears green and its own
+           word everywhere the reader sees it */
+        const over = audit.status === "discrepancy" && overage > 0
+        const status = over ? "Over" : STATUS_LABEL[audit.status]
+
+        return {
+          id: `day-${audit.storeId}-${audit.day}`,
+          kind: "day" as const,
+          title: rowDate(d),
+          subtitle: `${name(audit.storeId)} · ${status}`,
+          meta: peso.format(audit.expected),
+          details: [
+            { label: "Branch", value: name(audit.storeId) },
+            {
+              label: "Status",
+              value: status,
+              tone:
+                audit.status === "discrepancy" && !over
+                  ? ("bad" as const)
+                  : audit.status === "matched" || over
+                    ? ("good" as const)
+                    : undefined,
+            },
+            { label: "Gross profit", value: peso.format(audit.profit) },
+            { label: "Expenses", value: peso.format(audit.expenses) },
+            ...(audit.advances > 0
+              ? [{ label: "Advances", value: peso.format(audit.advances) }]
+              : []),
+            { label: "Expected deposit", value: peso.format(audit.expected) },
+            {
+              label: "Deposited",
+              value: audit.deposited === null ? "Not yet" : peso.format(audit.deposited),
+            },
+            ...(shortfall > 0
+              ? [{ label: "Short by", value: peso.format(shortfall), tone: "bad" as const }]
+              : []),
+            ...(overage > 0
+              ? [{ label: "Over by", value: peso.format(overage), tone: "good" as const }]
+              : []),
+            ...(audit.reference ? [{ label: "Reference", value: audit.reference }] : []),
+          ],
+          to: routes.day.to,
+          toLabel: routes.day.label,
+        }
+      }),
+    },
+    {
+      kind: "expense",
+      label: KIND_LABEL.expense,
+      total: results.expenses.total,
+      items: results.expenses.items.map((item: ExpenseItem) => {
+        const d = fromDayKey(item.day)
+
+        return {
+          id: `expense-${item.id}`,
+          kind: "expense" as const,
+          title: item.note,
+          subtitle: `${item.category} · ${name(item.storeId)} · ${rowDate(d)}`,
+          meta: peso.format(item.amount),
+          details: [
+            { label: "Category", value: item.category },
+            { label: "Branch", value: name(item.storeId) },
+            { label: "Day", value: rowDate(d) },
+            { label: "Logged at", value: clockLabel(new Date(item.at)) },
+            { label: "Amount", value: peso.format(item.amount) },
+            {
+              label: "Receipts",
+              value:
+                item.receiptUrls.length === 0
+                  ? "None (company-covered)"
+                  : `${item.receiptUrls.length} on file`,
+            },
+          ],
+          to: routes.expense.to,
+          toLabel: routes.expense.label,
+        }
+      }),
+    },
+    {
+      kind: "deposit",
+      label: KIND_LABEL.deposit,
+      total: results.deposits.total,
+      items: results.deposits.items.map((dep: Deposit) => {
+        const days = dep.covers.map(fromDayKey)
+        const covers =
+          days.length === 1
+            ? rowDate(days[0])
+            : `${shortDate(days[0])} - ${shortDate(days[days.length - 1])}`
+        const answered = dep.amount + dep.online
+        const short =
+          !dep.matched && dep.expected !== null && answered < dep.expected
+            ? dep.expected - answered
+            : 0
+        const overage =
+          !dep.matched && dep.expected !== null && answered > dep.expected
+            ? answered - dep.expected
+            : 0
+
+        return {
+          id: `deposit-${dep.id}`,
+          kind: "deposit" as const,
+          title: `Deposit ${dep.reference}`,
+          subtitle: `${name(dep.storeId)} · covers ${covers}`,
+          meta: peso.format(dep.amount),
+          details: [
+            { label: "Branch", value: name(dep.storeId) },
+            { label: "Reference", value: dep.reference },
+            {
+              label: "Status",
+              value: dep.matched ? "Matched" : overage > 0 ? "Over" : "Discrepancy",
+              tone: dep.matched || overage > 0 ? ("good" as const) : ("bad" as const),
+            },
+            { label: "Deposited", value: peso.format(dep.amount) },
+            ...(dep.online > 0
+              ? [{ label: "Declared online", value: peso.format(dep.online) }]
+              : []),
+            ...(dep.expected !== null
+              ? [{ label: "Expected", value: peso.format(dep.expected) }]
+              : []),
+            ...(short > 0
+              ? [{ label: "Short by", value: peso.format(short), tone: "bad" as const }]
+              : []),
+            ...(overage > 0
+              ? [{ label: "Over by", value: peso.format(overage), tone: "good" as const }]
+              : []),
+            {
+              label: days.length === 1 ? "Covers" : `Covers ${days.length} days`,
+              value: days.map((d) => shortDate(d)).join(", "),
+            },
+          ],
+          to: routes.deposit.to,
+          toLabel: routes.deposit.label,
+        }
+      }),
+    },
+    {
+      kind: "manager",
+      label: KIND_LABEL.manager,
+      total: results.managers.total,
+      items: results.managers.items.map((m: Manager) => ({
+        id: `manager-${m.id}`,
+        kind: "manager" as const,
+        title: m.name,
+        subtitle: `${m.username} · ${name(m.storeId)}`,
+        details: [
+          { label: "Name", value: m.name },
+          { label: "Username", value: m.username },
+          { label: "Branch", value: name(m.storeId) },
+          {
+            label: "Account",
+            value: m.active ? "Active" : "Disabled",
+            tone: m.active ? ("good" as const) : ("bad" as const),
+          },
+        ],
+        to: routes.manager.to,
+        toLabel: routes.manager.label,
+      })),
+    },
+    {
+      kind: "branch",
+      label: KIND_LABEL.branch,
+      total: results.branches.total,
+      items: results.branches.items.map((b) => ({
+        id: `branch-${b.id}`,
+        kind: "branch" as const,
+        title: b.name,
+        subtitle: b.managerName ? `Managed by ${b.managerName}` : "No manager assigned",
+        details: [
+          { label: "Branch", value: b.name },
+          { label: "Manager", value: b.managerName ?? "None assigned" },
+          { label: "POS", value: "Loyverse-linked", tone: "good" as const },
+        ],
+        to: routes.branch.to,
+        toLabel: routes.branch.label,
+      })),
+    },
+  ]
+
+  return groups.filter((g) => g.total > 0)
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Query parsing — used only by the SAMPLE adapter, which mirrors the server's
+ * matching so demo mode behaves like production. The real matching runs in
+ * the backend's App\Support\GlobalSearch; keep the two in lockstep.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
 const MONTHS = [
   "january",
   "february",
@@ -107,306 +306,17 @@ const MONTHS = [
   "december",
 ]
 
-/* Every way a reader might write this day, so a word query like "july" reaches
-   it without the caller choosing a date mode */
-function dateWords(d: Date): string {
-  return [
-    rowDate(d),
-    MONTHS[d.getMonth()],
-    d.getDate(),
-    d.getFullYear(),
-    dayKey(d),
-    `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`,
-  ].join(" ")
-}
+export type DateHint = { year?: number; month?: number; day?: number }
 
 /*
- * Builds a haystack in one place so it is lowercased in one place. Assembling
- * these inline invited a real bug: `a + b.toLowerCase()` binds the call to `b`
- * alone, which left the branch name, the category, and the status label in
- * their original case, and "meals", "wifi bill", and "discrepancy" all matched
- * nothing at all.
+ * Splits a query into a date and whatever else was typed. A recognised date
+ * filters on the record's own day; only the leftover words stay substring
+ * matches — which is what makes "meals july 3" mean meals ON that day. Bare
+ * numbers become a day or a year only when a month was named; on their own
+ * they stay ordinary tokens, so "480" and "712063" still find an amount and
+ * a deposit reference.
  */
-function hay(...parts: (string | number | null | undefined)[]): string {
-  return parts
-    .filter((p) => p !== null && p !== undefined && p !== "")
-    .join(" ")
-    .toLowerCase()
-}
-
-export async function buildCorpus(scope: SearchScope, today: Date): Promise<SearchRecord[]> {
-  const base = startOfDay(today)
-  const from = dayKey(addDays(base, -WINDOW_DAYS))
-  const to = dayKey(base)
-
-  /* Every query the index needs, in parallel — one call per resource across the
-     whole window, not one per day */
-  const [allStores, audits, managers, expensesPerStore] = await Promise.all([
-    api.stores(),
-    api.dayAudits(scope.storeIds, { from, to }),
-    scope.includeAccounts ? api.managers() : Promise.resolve([] as Manager[]),
-    Promise.all(scope.storeIds.map((id) => api.expenses(id, { from, to }))),
-  ])
-
-  const stores: Store[] = allStores.filter((s) => scope.storeIds.includes(s.id))
-  const records: SearchRecord[] = []
-  const { routes } = scope
-
-  const auditsByStore = new Map<string, DayAudit[]>()
-  for (const a of audits) auditsByStore.set(a.storeId, [...(auditsByStore.get(a.storeId) ?? []), a])
-  const expensesByStore = new Map<string, ExpenseItem[]>(
-    scope.storeIds.map((id, i) => [id, expensesPerStore[i] ?? []]),
-  )
-
-  for (const store of stores) {
-    /* Keyed by reference, because one bank deposit can cover several audited
-       days and should surface once rather than once per day */
-    const deposits = new Map<
-      string,
-      { amount: number; expected: number; days: Date[]; short: boolean }
-    >()
-
-    for (const audit of auditsByStore.get(store.id) ?? []) {
-      const d = fromDayKey(audit.day)
-      const key = audit.day
-      const words = dateWords(d)
-      const status = STATUS_LABEL[audit.status]
-      // Cash plus declared online money is what answers the judged figure —
-      // the deposit's whole batch when it covers several days
-      const answered =
-        audit.deposited === null ? null : audit.deposited + (audit.online ?? 0)
-      const judged =
-        audit.depositExpected ??
-        ((audit.depositCovers?.length ?? 0) > 1 ? null : audit.expected)
-      const shortfall =
-        answered !== null && judged !== null && answered < judged ? judged - answered : 0
-
-      records.push({
-        id: `day-${store.id}-${key}`,
-        kind: "day",
-        title: rowDate(d),
-        subtitle: `${store.name} · ${status}`,
-        meta: peso.format(audit.expected),
-        details: [
-          { label: "Branch", value: store.name },
-          {
-            label: "Status",
-            value: status,
-            tone:
-              audit.status === "discrepancy"
-                ? "bad"
-                : audit.status === "matched"
-                  ? "good"
-                  : undefined,
-          },
-          { label: "Gross profit", value: peso.format(audit.profit) },
-          { label: "Expenses", value: peso.format(audit.expenses) },
-          { label: "Expected deposit", value: peso.format(audit.expected) },
-          {
-            label: "Deposited",
-            value: audit.deposited === null ? "Not yet" : peso.format(audit.deposited),
-          },
-          ...(shortfall > 0
-            ? [{ label: "Short by", value: peso.format(shortfall), tone: "bad" as const }]
-            : []),
-          ...(audit.reference ? [{ label: "Reference", value: audit.reference }] : []),
-        ],
-        to: routes.day.to,
-        toLabel: routes.day.label,
-        at: d.getTime(),
-        haystack: hay(
-          "audited day audit",
-          store.name,
-          words,
-          status,
-          audit.profit,
-          audit.expenses,
-          audit.expected,
-          audit.deposited,
-          audit.reference,
-        ),
-      })
-
-      for (const item of (expensesByStore.get(store.id) ?? []).filter((i) => i.day === key)) {
-        records.push({
-          id: `expense-${item.id}`,
-          kind: "expense",
-          title: item.note,
-          subtitle: `${item.category} · ${store.name} · ${rowDate(d)}`,
-          meta: peso.format(item.amount),
-          details: [
-            { label: "Category", value: item.category },
-            { label: "Branch", value: store.name },
-            { label: "Day", value: rowDate(d) },
-            { label: "Logged at", value: clockLabel(new Date(item.at)) },
-            { label: "Amount", value: peso.format(item.amount) },
-            {
-              label: "Receipts",
-              value:
-                item.receiptUrls.length === 0
-                  ? "None (company-covered)"
-                  : `${item.receiptUrls.length} on file`,
-            },
-          ],
-          to: routes.expense.to,
-          toLabel: routes.expense.label,
-          at: d.getTime(),
-          haystack: hay(
-            "expense",
-            item.note,
-            item.category,
-            store.name,
-            words,
-            item.amount,
-            clockLabel(new Date(item.at)),
-            item.receiptUrls.length === 0 ? "no receipt" : "receipt",
-          ),
-        })
-      }
-
-      if (audit.reference && audit.deposited !== null) {
-        const held = deposits.get(audit.reference)
-        if (held) {
-          held.amount += audit.deposited
-          held.expected += audit.expected
-          held.days.push(d)
-          held.short = held.short || shortfall > 0
-        } else {
-          deposits.set(audit.reference, {
-            amount: audit.deposited,
-            expected: audit.expected,
-            days: [d],
-            short: shortfall > 0,
-          })
-        }
-      }
-    }
-
-    for (const [reference, dep] of deposits) {
-      const days = [...dep.days].sort((a, b) => a.getTime() - b.getTime())
-      const covers =
-        days.length === 1
-          ? rowDate(days[0])
-          : `${shortDate(days[0])} - ${shortDate(days[days.length - 1])}`
-      const status = dep.short ? "Discrepancy" : "Matched"
-
-      records.push({
-        id: `deposit-${store.id}-${reference}`,
-        kind: "deposit",
-        title: `Deposit ${reference}`,
-        subtitle: `${store.name} · covers ${covers}`,
-        meta: peso.format(dep.amount),
-        details: [
-          { label: "Branch", value: store.name },
-          { label: "Reference", value: reference },
-          {
-            label: "Status",
-            value: status,
-            tone: dep.short ? "bad" : "good",
-          },
-          { label: "Deposited", value: peso.format(dep.amount) },
-          { label: "Expected", value: peso.format(dep.expected) },
-          ...(dep.short
-            ? [
-                {
-                  label: "Short by",
-                  value: peso.format(dep.expected - dep.amount),
-                  tone: "bad" as const,
-                },
-              ]
-            : []),
-          {
-            label: days.length === 1 ? "Covers" : `Covers ${days.length} days`,
-            value: days.map((d) => shortDate(d)).join(", "),
-          },
-        ],
-        to: routes.deposit.to,
-        toLabel: routes.deposit.label,
-        at: days[days.length - 1].getTime(),
-        haystack: hay(
-          "deposit slip",
-          reference,
-          store.name,
-          status,
-          dep.amount,
-          dep.expected,
-          days.map((d) => dateWords(d)).join(" "),
-        ),
-      })
-    }
-  }
-
-  if (scope.includeAccounts) {
-    for (const store of stores) {
-      const held = managers.find((m) => m.storeId === store.id)
-      records.push({
-        id: `branch-${store.id}`,
-        kind: "branch",
-        title: store.name,
-        subtitle: held ? `Managed by ${held.name}` : "No manager assigned",
-        details: [
-          { label: "Branch", value: store.name },
-          { label: "Manager", value: held?.name ?? "None assigned" },
-          { label: "POS", value: "Loyverse-linked", tone: "good" },
-        ],
-        to: routes.branch.to,
-        toLabel: routes.branch.label,
-        at: 0,
-        haystack: hay("branch store", store.name, held?.name ?? "unassigned no manager"),
-      })
-    }
-
-    for (const m of managers) {
-      const store = allStores.find((s) => s.id === m.storeId)
-      records.push({
-        id: `manager-${m.id}`,
-        kind: "manager",
-        title: m.name,
-        subtitle: `${m.username} · ${store?.name ?? "Unassigned"}`,
-        details: [
-          { label: "Name", value: m.name },
-          { label: "Username", value: m.username },
-          { label: "Branch", value: store?.name ?? "Unassigned" },
-          {
-            label: "Account",
-            value: m.active ? "Active" : "Disabled",
-            tone: m.active ? "good" : "bad",
-          },
-        ],
-        to: routes.manager.to,
-        toLabel: routes.manager.label,
-        at: 0,
-        haystack: hay(
-          "manager account",
-          m.name,
-          m.username,
-          store?.name,
-          m.active ? "active" : "disabled",
-        ),
-      })
-    }
-  }
-
-  return records
-}
-
-type DateHint = { year?: number; month?: number; day?: number }
-
-/*
- * Splits a query into a date and whatever else was typed.
- *
- * A recognised date has to narrow the results rather than merely add to them.
- * Leaving "july 3 2026" to substring matching returned every record in July:
- * "july" and "2026" sit in each of their date words, and a bare "3" turns up
- * inside almost any peso figure. So the date becomes a filter on the record's
- * own date, and only the leftover words stay substring matches — which is also
- * what makes "meals july 3" mean meals *on* that day.
- *
- * Bare numbers are only read as a day or a year when a month was named. On
- * their own they stay ordinary tokens, so "480" and "712063" still find an
- * amount and a deposit reference.
- */
-function parseQuery(raw: string): { hint: DateHint | null; tokens: string[] } {
+export function parseQuery(raw: string): { hint: DateHint | null; tokens: string[] } {
   const words = raw.trim().toLowerCase().replace(/,/g, " ").split(/\s+/).filter(Boolean)
   const hint: DateHint = {}
   const loose: string[] = []
@@ -459,41 +369,50 @@ function parseQuery(raw: string): { hint: DateHint | null; tokens: string[] } {
   return { hint, tokens: loose }
 }
 
-function matchesHint(record: SearchRecord, hint: DateHint): boolean {
-  // An account has no date of its own, so a dated query is not asking for it
-  if (!record.at) return false
-  const d = new Date(record.at)
-  if (hint.year !== undefined && d.getFullYear() !== hint.year) return false
-  if (hint.month !== undefined && d.getMonth() !== hint.month) return false
-  if (hint.day !== undefined && d.getDate() !== hint.day) return false
-  return true
+/** Whether any of the given `YYYY-MM-DD` days satisfies the date hint */
+export function hintHitsDays(hint: DateHint, days: string[]): boolean {
+  return days.some((day) => {
+    const d = fromDayKey(day)
+    if (hint.year !== undefined && d.getFullYear() !== hint.year) return false
+    if (hint.month !== undefined && d.getMonth() !== hint.month) return false
+    if (hint.day !== undefined && d.getDate() !== hint.day) return false
+    return true
+  })
 }
 
-export function runSearch(corpus: SearchRecord[], query: string): SearchRecord[] {
-  if (query.trim().length < SEARCH_MIN) return []
-
-  const { hint, tokens } = parseQuery(query)
-  if (!hint && tokens.length === 0) return []
-
-  return corpus
-    .filter((r) => {
-      if (hint && !matchesHint(r, hint)) return false
-      return tokens.every((t) => r.haystack.includes(t))
-    })
-    .sort((a, b) => b.at - a.at)
+/** Every way a reader might write this day, so a query like "july" reaches it */
+export function dateWords(day: string): string {
+  const d = fromDayKey(day)
+  return [
+    rowDate(d),
+    MONTHS[d.getMonth()],
+    d.getDate(),
+    d.getFullYear(),
+    day,
+    `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`,
+  ].join(" ")
 }
 
-export type SearchGroup = {
-  kind: SearchKind
-  label: string
-  items: SearchRecord[]
-  /* Everything that matched, so a truncated group can say how much it is hiding */
-  total: number
+/** "over" or "short", so those words find a deposit the way the UI names it */
+export function signWord(
+  deposited: number | null,
+  online: number | null,
+  judged: number | null,
+): string | null {
+  if (deposited === null || judged === null) return null
+  const diff = Math.round((deposited + (online ?? 0)) * 100) - Math.round(judged * 100)
+  return diff > 0 ? "over" : diff < 0 ? "short" : null
 }
 
-export function groupResults(results: SearchRecord[]): SearchGroup[] {
-  return KIND_ORDER.map((kind) => {
-    const all = results.filter((r) => r.kind === kind)
-    return { kind, label: KIND_LABEL[kind], items: all.slice(0, PER_GROUP), total: all.length }
-  }).filter((g) => g.total > 0)
+/** Builds a haystack in one place so it is lowercased in one place */
+export function hay(...parts: (string | number | null | undefined)[]): string {
+  return parts
+    .filter((p) => p !== null && p !== undefined && p !== "")
+    .join(" ")
+    .toLowerCase()
+}
+
+/** Every token must land somewhere in the haystack */
+export function tokensHit(tokens: string[], haystack: string): boolean {
+  return tokens.every((t) => haystack.includes(t))
 }

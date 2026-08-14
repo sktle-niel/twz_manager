@@ -1,6 +1,7 @@
 import { addDays } from "./dateRange"
 import type { DayStatus } from "./api"
-import type { HistoryEntry } from "./historyGroups"
+import { paintedStatus } from "./historyGroups"
+import type { HistoryEntry, PaintedStatus } from "./historyGroups"
 
 /*
  * The filter vocabulary both History pages share — one definition, so the
@@ -8,7 +9,7 @@ import type { HistoryEntry } from "./historyGroups"
  * or "Completed" means.
  */
 export type RangePreset = "last7" | "last30" | "last90" | "thisMonth" | "lastMonth" | "thisYear"
-export type StatusFilter = "all" | DayStatus
+export type StatusFilter = "all" | PaintedStatus
 export type HistoryTab = "all" | "completed" | "uncompleted"
 
 export const HISTORY_RANGES: { value: RangePreset; label: string }[] = [
@@ -23,6 +24,9 @@ export const HISTORY_RANGES: { value: RangePreset; label: string }[] = [
 export const HISTORY_STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All statuses" },
   { value: "matched", label: "Matched" },
+  /* Deposited more than expected, reason on file — split from Discrepancy
+     so the red word never covers good news */
+  { value: "over", label: "Over" },
   { value: "discrepancy", label: "Discrepancy" },
   { value: "pending", label: "Pending deposit" },
   { value: "open", label: "Open" },
@@ -72,12 +76,18 @@ export function filterEntries(
         tab === "all" ||
         (tab === "completed" ? isCompleted(e.audits[0].status) : !isCompleted(e.audits[0].status)),
     )
-    .filter((e) => status === "all" || e.audits[0].status === status)
+    .filter((e) => status === "all" || paintedStatus(e.audits[0]) === status)
 }
 
 /** Status counts across the whole range, one per entry (a batch counts once) */
-export function countEntries(entries: HistoryEntry[]): Record<DayStatus, number> {
-  const counts: Record<DayStatus, number> = { matched: 0, discrepancy: 0, pending: 0, open: 0 }
-  for (const e of entries) counts[e.audits[0].status]++
+export function countEntries(entries: HistoryEntry[]): Record<PaintedStatus, number> {
+  const counts: Record<PaintedStatus, number> = {
+    matched: 0,
+    over: 0,
+    discrepancy: 0,
+    pending: 0,
+    open: 0,
+  }
+  for (const e of entries) counts[paintedStatus(e.audits[0])]++
   return counts
 }

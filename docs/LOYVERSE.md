@@ -133,9 +133,14 @@ in Loyverse.
 
 ## Before going live
 
-- [ ] Token in the backend's secret store, never in the repo and never in a `VITE_` variable
+- [x] Token in the backend's secret store, never in the repo and never in a `VITE_` variable —
+      it lives only in the server `.env` (`LOYVERSE_API_TOKEN`), read by `config/loyverse.php`
 - [ ] Read the [API terms](https://loyverse.com/api-terms) — they bind the merchant account
-- [ ] Sync job with a persisted `updated_at` high-water mark and overlap
-- [ ] Per-store timezone on the branch record, used for day bucketing
-- [ ] Backoff and alerting on 429; the budget is shared with every other integration
-- [ ] Nightly full reconcile of the trailing 7 days, to repair anything the incremental pass missed
+- [x] Sync job with a persisted `updated_at` high-water mark and overlap —
+      `ReceiptSync`: watermark in settings, 2-minute overlap, advances only on a completed walk
+- [x] Per-store timezone on the branch record, used for day bucketing —
+      `stores.timezone`, applied at ingest and in the audit ledger's per-branch "today"
+- [x] Backoff and alerting on 429 — the client refuses locally at 240/300s before sending,
+      honors an upstream `Retry-After` as an app-wide cooldown, and logs both loudly
+- [x] Nightly full reconcile of the trailing 7 days — `twz:sync-sales --days=7`, scheduled
+      03:30 daily; upserts wholesale and never moves the watermark

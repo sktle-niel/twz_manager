@@ -132,7 +132,9 @@ export async function branchNotices({
           Math.round(judged * 100)
     notices.push({
       id: "discrepancy",
-      tone: "alert",
+      /* Over is information, not alarm — the drawer answered with more and
+         the reason is on file. Only a shortfall keeps the alert tone. */
+      tone: diffCents !== null && diffCents > 0 ? "info" : "alert",
       /* A batch deposit from before the judged sum was stored has no honest
          figure to name — the row still deserves its alert, just unnumbered */
       title:

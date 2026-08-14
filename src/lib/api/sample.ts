@@ -22,6 +22,17 @@
  * Selected by VITE_DATA_SOURCE=sample; see src/lib/api/index.ts.
  */
 import { addDays, dayKey, fromDayKey, startOfDay } from "../dateRange"
+import { clockLabel } from "../format"
+import {
+  STATUS_LABEL,
+  WINDOW_DAYS as SEARCH_WINDOW_DAYS,
+  dateWords,
+  hay,
+  hintHitsDays,
+  parseQuery,
+  signWord,
+  tokensHit,
+} from "../search"
 import { ApiError } from "./client"
 import type { DayRange, Session, TwzApi } from "./contracts"
 import type {
@@ -37,6 +48,7 @@ import type {
   HourPoint,
   Manager,
   Owner,
+  SearchGroupOf,
   SignInEvent,
   Store,
 } from "./types"
@@ -566,6 +578,9 @@ export const sampleApi: TwzApi = {
         identifier: "No account matches this.",
       })
     }
+    if (!found.active) {
+      return fail(403, "This account is disabled. Contact the owner.")
+    }
     signedIn = { manager: found, owner: null }
     sessionStorage.setItem(SESSION_KEY, found.id)
     return settle({ ...signedIn })
@@ -707,6 +722,16 @@ export const sampleApi: TwzApi = {
       if (signedIn.manager?.id === managerId) {
         signedIn = { ...signedIn, manager: managers.find((m) => m.id === managerId) ?? null }
       }
+    }
+    return settle([...managers])
+  },
+
+  setManagerActive: (managerId, active) => {
+    managers = managers.map((m) => (m.id === managerId ? { ...m, active } : m))
+    // Disabling is a sign-out everywhere; here "everywhere" is this tab
+    if (!active && signedIn.manager?.id === managerId) {
+      signedIn = { manager: null, owner: null }
+      sessionStorage.removeItem(SESSION_KEY)
     }
     return settle([...managers])
   },
@@ -866,6 +891,153 @@ export const sampleApi: TwzApi = {
 
   dayAudits: (storeIds, range) =>
     settle(storeIds.flatMap((id) => eachDay(range).map((day) => auditFor(id, day)))),
+
+  /*
+   * Mirrors the backend's GET /search (App\Support\GlobalSearch) so demo mode
+   * behaves like production: same parsing, same haystacks, same caps.
+   */
+  search: (q, storeIds) => {
+    // The branch scope is the caller's request, never their authority
+    if (
+      signedIn.manager &&
+      (storeIds.length !== 1 || storeIds[0] !== signedIn.manager.storeId)
+    ) {
+      return fail(403, "You do not have access to that.")
+    }
+    if (q.trim().length < 2) {
+      return fail(422, "Check the highlighted fields.", { q: "Type at least 2 characters." })
+    }
+    if (q.trim().length > 80) {
+      return fail(422, "Check the highlighted fields.", { q: "Keep it under 80 characters." })
+    }
+
+    const { hint, tokens } = parseQuery(q)
+    const cap = <T,>(all: T[]): SearchGroupOf<T> => ({ items: all.slice(0, 6), total: all.length })
+    const storeName = (id: string) => STORES.find((s) => s.id === id)?.name ?? id
+
+    const days: DayAudit[] = []
+    const expenses: ExpenseItem[] = []
+    const deposits: Deposit[] = []
+    let accountHits: Manager[] = []
+    let branchHits: (Store & { managerName: string | null })[] = []
+
+    if (hint !== null || tokens.length > 0) {
+      const base = startOfDay(new Date())
+      const window: DayKey[] = []
+      for (let i = 0; i <= SEARCH_WINDOW_DAYS; i++) window.push(dayKey(addDays(base, -i)))
+
+      for (const storeId of storeIds) {
+        for (const day of window) {
+          if (hint && !hintHitsDays(hint, [day])) continue
+          const audit = auditFor(storeId, day)
+          if (
+            tokensHit(
+              tokens,
+              hay(
+                "audited day audit",
+                storeName(storeId),
+                dateWords(day),
+                STATUS_LABEL[audit.status],
+                signWord(
+                  audit.deposited,
+                  audit.online,
+                  audit.depositExpected ??
+                    ((audit.depositCovers?.length ?? 0) > 1 ? null : audit.expected),
+                ),
+                audit.profit,
+                audit.expenses,
+                audit.expected,
+                audit.deposited,
+                audit.reference,
+              ),
+            )
+          ) {
+            days.push(audit)
+          }
+          for (const item of expensesFor(storeId, day)) {
+            if (
+              tokensHit(
+                tokens,
+                hay(
+                  "expense",
+                  item.note,
+                  item.category,
+                  storeName(storeId),
+                  dateWords(day),
+                  item.amount,
+                  clockLabel(new Date(item.at)),
+                  item.receiptUrls.length === 0 ? "no receipt" : "receipt",
+                ),
+              )
+            ) {
+              expenses.push(item)
+            }
+          }
+        }
+
+        for (const dep of recordedDeposits.get(storeId) ?? []) {
+          if (hint && !hintHitsDays(hint, [dep.day, ...dep.covers])) continue
+          if (
+            tokensHit(
+              tokens,
+              hay(
+                "deposit slip",
+                dep.reference,
+                storeName(storeId),
+                dep.matched ? "Matched" : "Discrepancy",
+                signWord(dep.amount, dep.online, dep.expected),
+                dep.amount,
+                dep.online > 0 ? dep.online : null,
+                dep.expected,
+                [dep.day, ...dep.covers].map(dateWords).join(" "),
+              ),
+            )
+          ) {
+            deposits.push(dep)
+          }
+        }
+      }
+
+      /* Accounts and branches are the owner's to see, and a dated query is
+         not asking for them */
+      if (signedIn.owner && hint === null) {
+        accountHits = managers.filter((m) =>
+          tokensHit(
+            tokens,
+            hay(
+              "manager account",
+              m.name,
+              m.username,
+              storeName(m.storeId),
+              m.active ? "active" : "disabled",
+            ),
+          ),
+        )
+        branchHits = STORES.flatMap((s) => {
+          const held = managers.find((m) => m.storeId === s.id)
+          return tokensHit(
+            tokens,
+            hay("branch store", s.name, held?.name ?? "unassigned no manager"),
+          )
+            ? [{ ...s, managerName: held?.name ?? null }]
+            : []
+        })
+      }
+    }
+
+    // Newest first across ALL stores, like the backend — the cap comes after
+    days.sort((a, b) => b.day.localeCompare(a.day))
+    expenses.sort((a, b) => b.day.localeCompare(a.day) || b.at.localeCompare(a.at))
+    deposits.sort((a, b) => b.day.localeCompare(a.day))
+
+    return settle({
+      days: cap(days),
+      expenses: cap(expenses),
+      deposits: cap(deposits),
+      managers: cap(accountHits),
+      branches: cap(branchHits),
+    })
+  },
 
   pendingDeposits: (storeId) => {
     const base = startOfDay(new Date())

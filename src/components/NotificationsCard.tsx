@@ -1,21 +1,17 @@
 import { useEffect, useState } from "react"
 import { BellRingingIcon } from "@phosphor-icons/react"
-import { ApiError, api } from "../lib/api"
+import { ApiError } from "../lib/api"
+import { pushSupported, subscribeAndRegister, unsubscribeAndForget } from "../lib/push"
 import { useToast } from "../lib/toast"
 
 /*
  * Reminders on this device: the evening "log your expenses" and the morning
  * "days are waiting for a deposit" nudges, delivered as web push so they
- * arrive with the app closed. One switch per browser — the subscription
- * belongs to this device, and turning it off here forgets only this one.
+ * arrive with the app closed. The manager shell turns these on by itself
+ * (src/lib/push.ts), so this card is mostly the off switch and the recovery
+ * door — one switch per browser; turning it off forgets only this device.
  */
 type PushState = "checking" | "unsupported" | "blocked" | "off" | "on" | "busy"
-
-function urlBase64ToUint8Array(base64: string): Uint8Array {
-  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4)
-  const raw = atob(padded.replace(/-/g, "+").replace(/_/g, "/"))
-  return Uint8Array.from(raw, (c) => c.charCodeAt(0))
-}
 
 export function NotificationsCard() {
   const { showToast } = useToast()
@@ -24,7 +20,7 @@ export function NotificationsCard() {
   useEffect(() => {
     let live = true
     async function look() {
-      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      if (!pushSupported()) {
         if (live) setState("unsupported")
         return
       }
@@ -52,17 +48,7 @@ export function NotificationsCard() {
         setState(permission === "denied" ? "blocked" : "off")
         return
       }
-      const registration = await navigator.serviceWorker.ready
-      const key = await api.pushKey()
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(key) as BufferSource,
-      })
-      const json = subscription.toJSON()
-      await api.savePushSubscription({
-        endpoint: subscription.endpoint,
-        keys: { p256dh: json.keys?.p256dh ?? "", auth: json.keys?.auth ?? "" },
-      })
+      await subscribeAndRegister()
       setState("on")
       showToast("Reminders are on for this device.")
     } catch (err) {
@@ -74,12 +60,7 @@ export function NotificationsCard() {
   async function turnOff() {
     setState("busy")
     try {
-      const registration = await navigator.serviceWorker.ready
-      const subscription = await registration.pushManager.getSubscription()
-      if (subscription) {
-        await api.deletePushSubscription(subscription.endpoint)
-        await subscription.unsubscribe()
-      }
+      await unsubscribeAndForget()
       setState("off")
       showToast("Reminders are off for this device.")
     } catch (err) {

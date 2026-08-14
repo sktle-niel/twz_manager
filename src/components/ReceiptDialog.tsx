@@ -6,6 +6,7 @@ import { peso, rowDate, shortDate } from "../lib/format"
 import { fromDayKey } from "../lib/dateRange"
 import { useSheetEnter } from "../lib/motion"
 import type { DayAudit } from "../lib/api"
+import { paintedStatus } from "../lib/historyGroups"
 import { StatusChip } from "./AuditRow"
 
 export type ReceiptTarget = {
@@ -84,7 +85,7 @@ export function ReceiptDialog({
         Math.round(online * 100) -
         Math.round(judgedAgainst * 100)
 
-  const rows: { label: string; value: string; tone?: "bad" }[] = [
+  const rows: { label: string; value: string; tone?: "bad" | "good" }[] = [
     { label: "Branch", value: branchName },
     /* From a batch row there is no single day in focus — the covers line and
        the breakdown below carry the dates instead */
@@ -121,7 +122,8 @@ export function ReceiptDialog({
     rows.push({
       label: differenceCents > 0 ? "Over by" : "Short by",
       value: peso.format(Math.abs(differenceCents) / 100),
-      tone: "bad",
+      // Extra money IN reads green; only a shortfall is the warning red
+      tone: differenceCents > 0 ? "good" : "bad",
     })
   }
 
@@ -152,7 +154,7 @@ export function ReceiptDialog({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <StatusChip status={audit.status} />
+            <StatusChip status={paintedStatus(audit)} />
             <button
               type="button"
               onClick={onClose}
@@ -200,7 +202,7 @@ export function ReceiptDialog({
               <dt className="text-[13px] text-mute">{r.label}</dt>
               <dd
                 className={`text-[13.5px] font-medium tabular-nums ${
-                  r.tone === "bad" ? "text-claret" : "text-ink"
+                  r.tone === "bad" ? "text-claret" : r.tone === "good" ? "text-sage-ink" : "text-ink"
                 }`}
               >
                 {r.value}

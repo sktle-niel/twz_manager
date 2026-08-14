@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode, SubmitEvent } from "react"
 import { Link } from "react-router-dom"
-import { CheckCircleIcon, SpinnerGapIcon, WarningCircleIcon } from "@phosphor-icons/react"
+import {
+  ArrowCircleUpIcon,
+  CheckCircleIcon,
+  SpinnerGapIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react"
 import { peso, rowDate, shortDate } from "../lib/format"
 import { ApiError, api } from "../lib/api"
 import { useApi } from "../lib/useApi"
@@ -49,6 +54,9 @@ type RecordedDeposit = {
   id: string
   dateLabel: string
   amount: number
+  /* Cash + online against the judged expected is what tells Over from short */
+  online: number
+  expected: number | null
   coversLabel: string
   matched: boolean
 }
@@ -67,17 +75,38 @@ function SelectionNotice({ children }: { children: ReactNode }) {
   )
 }
 
-function StatusChip({ matched }: { matched: boolean }) {
-  return matched ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-sage px-2 py-0.5 text-[11px] font-medium text-sage-ink">
-      <CheckCircleIcon size={12} weight="fill" aria-hidden="true" />
-      Matched
-    </span>
-  ) : (
+function StatusChip({ matched, over }: { matched: boolean; over: boolean }) {
+  if (matched) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-sage px-2 py-0.5 text-[11px] font-medium text-sage-ink">
+        <CheckCircleIcon size={12} weight="fill" aria-hidden="true" />
+        Matched
+      </span>
+    )
+  }
+  // Extra money IN, reason on file — green, never the warning red
+  if (over) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-sage px-2 py-0.5 text-[11px] font-medium text-sage-ink">
+        <ArrowCircleUpIcon size={12} weight="fill" aria-hidden="true" />
+        Over
+      </span>
+    )
+  }
+  return (
     <span className="inline-flex items-center gap-1 rounded-full bg-claret/10 px-2 py-0.5 text-[11px] font-medium text-claret">
       <WarningCircleIcon size={12} weight="fill" aria-hidden="true" />
       Discrepancy
     </span>
+  )
+}
+
+/** A recorded deposit that answered with MORE than its judged expected */
+function depositOver(dep: { amount: number; online: number; expected: number | null }): boolean {
+  if (dep.expected === null) return false
+  return (
+    Math.round(dep.amount * 100) + Math.round(dep.online * 100) >
+    Math.round(dep.expected * 100)
   )
 }
 
@@ -183,6 +212,8 @@ export default function DepositsPage() {
       id: d.id,
       dateLabel: dayKey(startOfDay(today)) === d.day ? "Today" : rowDate(fromDayKey(d.day)),
       amount: d.amount,
+      online: d.online,
+      expected: d.expected,
       coversLabel:
         days.length === 1
           ? `Covers ${shortDate(days[0])}`
@@ -379,7 +410,9 @@ export default function DepositsPage() {
     showToast(
       shortfallCents === 0
         ? `${peso.format(value)}${onlineAmount > 0 ? ` + ${peso.format(onlineAmount)} online` : ""} recorded · ${covers.replace(/^Covers /, "covers ")}.`
-        : `Recorded with a discrepancy: ${peso.format(Math.abs(shortfallCents) / 100)} ${shortfallCents > 0 ? "over" : "short"}.`,
+        : shortfallCents > 0
+          ? `Recorded: ${peso.format(shortfallCents / 100)} over the expected — noted.`
+          : `Recorded with a discrepancy: ${peso.format(Math.abs(shortfallCents) / 100)} short.`,
     )
   }
 
@@ -592,7 +625,7 @@ export default function DepositsPage() {
                 <p
                   role="status"
                   className={`mt-1.5 flex items-center gap-1.5 text-[13px] ${
-                    mismatchCents === 0 ? "text-sage-ink" : "text-claret"
+                    mismatchCents < 0 ? "text-claret" : "text-sage-ink"
                   }`}
                 >
                   {mismatchCents === 0 ? (
@@ -604,7 +637,13 @@ export default function DepositsPage() {
                     </>
                   ) : (
                     <>
-                      <WarningCircleIcon size={15} weight="fill" aria-hidden="true" />
+                      {/* Over is green — the drawer answered with MORE — but
+                          both directions still open the notes form below */}
+                      {mismatchCents > 0 ? (
+                        <ArrowCircleUpIcon size={15} weight="fill" aria-hidden="true" />
+                      ) : (
+                        <WarningCircleIcon size={15} weight="fill" aria-hidden="true" />
+                      )}
                       {peso.format(mismatchAbs)} {mismatchCents > 0 ? "over" : "short"} of{" "}
                       {peso.format(selectedTotal)}
                       {onlineValue > 0 ? `, counting ${peso.format(onlineValue)} online` : ""}.
@@ -764,19 +803,42 @@ export default function DepositsPage() {
           {/*
             A mismatch can never be closed silently, so the form appears the
             moment the figures disagree rather than after a failed submit.
+            Over wears green — extra money IN is good news — but the notes
+            are required exactly the same way.
           */}
           {mismatchCents !== 0 && (
-            <div className="rounded-lg border border-claret/40 bg-claret/[0.03] p-4">
-              <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-claret">
-                <WarningCircleIcon size={16} weight="fill" aria-hidden="true" />
-                Discrepancy: {peso.format(mismatchAbs)} {mismatchCents > 0 ? "over" : "short"}
+            <div
+              className={`rounded-lg border p-4 ${
+                mismatchCents > 0
+                  ? "border-sage-ink/30 bg-sage/40"
+                  : "border-claret/40 bg-claret/[0.03]"
+              }`}
+            >
+              <h3
+                className={`flex items-center gap-1.5 text-[14px] font-semibold ${
+                  mismatchCents > 0 ? "text-sage-ink" : "text-claret"
+                }`}
+              >
+                {mismatchCents > 0 ? (
+                  <>
+                    <ArrowCircleUpIcon size={16} weight="fill" aria-hidden="true" />
+                    Over by {peso.format(mismatchAbs)}
+                  </>
+                ) : (
+                  <>
+                    <WarningCircleIcon size={16} weight="fill" aria-hidden="true" />
+                    Discrepancy: {peso.format(mismatchAbs)} short
+                  </>
+                )}
               </h3>
               <p className="mt-1 text-[12.5px] leading-[1.5] text-ink-soft">
                 {peso.format(selectedTotal)} was expected for{" "}
                 {selectedDays.length === 1 ? "this day" : `these ${selectedDays.length} days`} and{" "}
                 {peso.format(cents(amountValue) / 100)} was deposited
                 {onlineValue > 0 ? ` with ${peso.format(cents(onlineValue) / 100)} in online` : ""}.
-                This cannot be recorded until the difference is explained.
+                {mismatchCents > 0
+                  ? " This cannot be recorded until the extra is explained."
+                  : " This cannot be recorded until the difference is explained."}
               </p>
 
               <div className="mt-3">
@@ -864,7 +926,7 @@ export default function DepositsPage() {
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
                   <span className="text-[13.5px] font-medium text-ink-soft">{dep.dateLabel}</span>
-                  <StatusChip matched={dep.matched} />
+                  <StatusChip matched={dep.matched} over={depositOver(dep)} />
                 </span>
                 <span className="mt-0.5 block text-[12px] text-mute">{dep.coversLabel}</span>
               </span>

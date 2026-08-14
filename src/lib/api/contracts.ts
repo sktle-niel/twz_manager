@@ -34,6 +34,7 @@ import type {
   Owner,
   ProfileInput,
   ResetPinStatus,
+  SearchResults,
   SignInEvent,
   Store,
 } from "./types"
@@ -93,6 +94,12 @@ export type TwzApi = {
   }): Promise<Manager>
   /** Reassigning a held branch swaps the two managers, server-side */
   assignBranch(managerId: string, storeId: string): Promise<Manager[]>
+  /**
+   * Disables or re-enables a branch account. Disabling signs the manager out
+   * everywhere (sessions, remembered devices, push mailboxes) and sign-in
+   * refuses them until re-enabled; the branch assignment stays until changed.
+   */
+  setManagerActive(managerId: string, active: boolean): Promise<Manager[]>
 
   /* ---- sales ---- */
 
@@ -124,6 +131,17 @@ export type TwzApi = {
   dayAudits(storeIds: string[], range: DayRange): Promise<DayAudit[]>
   /** Audited days with no deposit against them yet, oldest first */
   pendingDeposits(storeId: string): Promise<DayAudit[]>
+
+  /* ---- search ---- */
+
+  /**
+   * One query over everything the caller may see, covering the last 90 days.
+   * Every token must land somewhere in a record; a recognised date ("july 3",
+   * "7/3/2026") narrows by the record's own day. Groups come back capped,
+   * newest first, with `total` counting every match. The branch scope is the
+   * caller's request, never their authority.
+   */
+  search(q: string, storeIds: string[]): Promise<SearchResults>
   deposits(storeId: string, range: DayRange): Promise<Deposit[]>
   /** Rejects 409 with a field error on `slip` when the photo already covers a deposit */
   recordDeposit(input: NewDeposit): Promise<Deposit>
@@ -179,9 +197,3 @@ export type TwzApi = {
   saveReconciliationRules(rules: { batchWindowDays: number }): Promise<void>
 }
 
-/*
- * Search deliberately has no entry here. It currently builds its index in the
- * browser from data already on the page, which cannot survive a real dataset —
- * the backend will own it as a single query endpoint. Wiring the present
- * client-side index into this contract would freeze the wrong shape.
- */

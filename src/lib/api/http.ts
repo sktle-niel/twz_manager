@@ -21,6 +21,7 @@ import type {
   NewExpense,
   ProfileInput,
   ResetPinStatus,
+  SearchResults,
   SignInEvent,
   Store,
 } from "./types"
@@ -70,6 +71,8 @@ export const httpApi: TwzApi = {
   issueManager: (input) => send<Manager>("POST", "/managers", input),
   assignBranch: (managerId, storeId) =>
     send<Manager[]>("PATCH", `/managers/${managerId}/branch`, { storeId }),
+  setManagerActive: (managerId, active) =>
+    send<Manager[]>("PATCH", `/managers/${managerId}/active`, { active }),
 
   dailySales: (storeIds, r) => get<DailySales[]>("/sales/daily", { storeIds, ...range(r) }),
   hourlySales: (storeIds, day) => get<HourPoint[]>("/sales/hourly", { storeIds, day }),
@@ -119,6 +122,7 @@ export const httpApi: TwzApi = {
   deleteAdvance: (id) => send<void>("DELETE", `/advances/${id}`),
 
   dayAudits: (storeIds, r) => get<DayAudit[]>("/audits", { storeIds, ...range(r) }),
+  search: (q, storeIds) => get<SearchResults>("/search", { q, storeIds }),
   pendingDeposits: (storeId) => get<DayAudit[]>("/deposits/pending", { storeId }),
   deposits: (storeId, r) => get<Deposit[]>("/deposits", { storeId, ...range(r) }),
   recordDeposit: (input: NewDeposit) =>
