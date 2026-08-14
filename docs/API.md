@@ -208,6 +208,39 @@ Body `{ storeId }`. Assigns the branch; if another manager holds it, **swap
 the two server-side** — one branch, one manager is the backend's invariant.
 **200** the full updated `Manager[]`.
 
+### `PATCH /managers/{managerId}/active`
+Body `{ active: boolean }`. Disables or re-enables a branch account. Disabling
+revokes every door at once: live sessions are dropped, remembered devices
+forgotten, push mailboxes deleted, and sign-in answers **403** until the
+account is re-enabled. The branch assignment stays — a disabled manager still
+holds their branch until it is reassigned, so the seat is visibly theirs.
+**200** the full updated `Manager[]`. **404** when the account is gone.
+
+## Search
+
+### `GET /search?q=…&storeIds=…`
+One query over everything the caller may see, covering the last **90 days**:
+audited days, expenses, deposits — and for the owner, the manager accounts and
+branches too. `storeIds` follows the repeated-key array convention and is the
+caller's request, never their authority: a manager may only ask for their own
+branch.
+
+Matching: the query splits into tokens and **every token must appear
+somewhere** in a record — its dates spelled several ways ("july",
+"2026-08-03", "8/3/2026"), its amounts as bare digits ("480"), its words
+("meals", "discrepancy", a deposit reference). A recognised date ("july 3",
+"7/3/2026") narrows by the record's own day instead of substring-matching;
+accounts and branches carry no day of their own, so a dated query skips them.
+
+**200** `{ days, expenses, deposits, managers, branches }`, each group
+`{ items, total }`: `days.items` are `DayAudit[]`, `expenses.items`
+`ExpenseItem[]`, `deposits.items` `Deposit[]`, `managers.items` `Manager[]`,
+and `branches.items` `{ id, name, managerName: string | null }[]`. Each group
+holds at most **6** items, newest first; `total` counts every match so the UI
+can say what it is not showing. `managers` and `branches` are always empty for
+a manager. **422** `fields.q` under 2 or over 80 characters, **403**
+out-of-scope `storeIds`.
+
 ## Sales
 
 Range-shaped, never per-day: the dashboard asks for 90 days in one call.
@@ -367,6 +400,12 @@ Files: one `slip` part (required), repeated `discrepancyProof` parts
   absent. **Recompute the SHA-256 server-side** and enforce one-photo-one-
   deposit on your own hash: a duplicate is **409** with `fields.slip`. The
   client's values are hints for early UX, never authority.
+- An **over**-deposit (cash + online above the judged expected) records the
+  same way a shortfall does — `discrepancyReason` required, `matched: false`,
+  day status `discrepancy` — but clients paint it green as **"Over"**: the
+  direction is derived from `deposited + online` against `depositExpected`
+  (falling back to the single day's `expected`), never from a new status
+  value on the wire.
 - The expected sum the deposit was judged against is **stored on the deposit**
   (`Deposit.expected`) and echoed back, so the verdict can never drift from
   the figures it was made on.

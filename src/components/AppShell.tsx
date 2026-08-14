@@ -14,6 +14,7 @@ import logo from "../assets/twz-logo-light.png"
 import crew from "../assets/twz-crew.webp"
 import { stockAvatar } from "../lib/avatar"
 import { useRouteReveal, useSheetEnter } from "../lib/motion"
+import { ensureRemindersOn } from "../lib/push"
 import { useAuth, useManagerSession } from "../lib/session"
 import { useToast } from "../lib/toast"
 import { GlobalSearch } from "./GlobalSearch"
@@ -125,6 +126,13 @@ export default function AppShell() {
    * routes, so one hook keyed on the path covers all five of them.
    */
   useRouteReveal(mainRef, pathname)
+
+  /* Reminders are on by default: every boot of the manager area makes sure
+     this device is subscribed, asking for permission once per visit until
+     it is granted. The Account page card stays the manual off switch. */
+  useEffect(() => {
+    void ensureRemindersOn()
+  }, [manager.id])
 
   return (
     <div className="min-h-[100dvh] lg:pl-60">
@@ -262,7 +270,7 @@ export default function AppShell() {
       <NewEntrySheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
 
       {/* Scoped to the signed-in manager's branch, like every other page here */}
-      <GlobalSearch storeIds={[store.id]} owner={false} />
+      <GlobalSearch stores={[store]} owner={false} />
     </div>
   )
 }

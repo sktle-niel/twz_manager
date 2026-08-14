@@ -33,7 +33,7 @@ function App() {
         {/* One listener turns connection trouble into words, app-wide */}
         <ConnectionToasts />
         <SessionProvider>
-        {/* Watches for a fresh sign-in on an uninstalled device — 30s nudge */}
+        {/* Greets every uninstalled visit — login page included — until the app is on the home screen */}
         <InstallBanner />
         <Suspense
           fallback={

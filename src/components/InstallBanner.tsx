@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import { createPortal } from "react-dom"
 import { DeviceMobileIcon, XIcon } from "@phosphor-icons/react"
 import {
@@ -8,59 +8,40 @@ import {
   promptInstall,
   subscribeInstall,
 } from "../lib/install"
-import { useAuth } from "../lib/session"
 import { useToast } from "../lib/toast"
 
 /*
- * The one-time nudge: a device that just signed in and has not installed the
- * app gets thirty seconds of "put this on your home screen" — then it leaves
- * and never returns on this device. The Account page keeps the same offer as
- * a button for anyone who let the banner pass.
+ * The door greeter: every visit that could end with the app on the home
+ * screen opens with this offer — login page included, no waiting for a
+ * sign-in. One tap runs the browser's real install dialog and the icon lands
+ * by itself; nobody digs through a browser menu. Dismissing holds for this
+ * visit only — the next visit asks again, until the app is actually
+ * installed. The Account page keeps the same offer as a standing button.
  */
-const SEEN_KEY = "twz-install-nudged"
-const HOLD_MS = 30_000
+const DISMISS_KEY = "twz-install-dismissed"
 
 export function InstallBanner() {
-  const { status } = useAuth()
   const { showToast } = useToast()
   const installState = useSyncExternalStore(subscribeInstall, getInstallState)
 
-  /* Armed by the sign-in transition itself — a device that boots already
-     signed in has been here before and is not a "new device login" */
-  const [armed, setArmed] = useState(false)
-  const [open, setOpen] = useState(false)
+  const [dismissed, setDismissed] = useState(
+    () => sessionStorage.getItem(DISMISS_KEY) !== null,
+  )
   const [entered, setEntered] = useState(false)
-  const prevStatus = useRef(status)
 
-  useEffect(() => {
-    const wasOut = prevStatus.current === "signed-out"
-    prevStatus.current = status
-    if (!wasOut || (status !== "manager" && status !== "owner")) return
-    if (isStandalone() || localStorage.getItem(SEEN_KEY) !== null) return
-    setArmed(true)
-  }, [status])
+  /* Opens the moment the offer is real: Chrome's caught prompt event, or iOS,
+     where the Share-sheet instructions ARE the offer. `installed` covers the
+     appinstalled event landing mid-session. */
+  const open =
+    !dismissed &&
+    installState !== "installed" &&
+    !isStandalone() &&
+    (installState === "ready" || isIos())
 
-  /* Opens only once the offer is real: the caught prompt event, or iOS where
-     the instructions ARE the offer. Waiting on `installState` covers Chrome
-     firing beforeinstallprompt a beat after the sign-in lands. */
-  useEffect(() => {
-    if (!armed || open) return
-    if (installState !== "ready" && !isIos()) return
-    if (installState === "installed") {
-      setArmed(false)
-      return
-    }
-    localStorage.setItem(SEEN_KEY, new Date().toISOString())
-    setOpen(true)
-  }, [armed, open, installState])
-
-  // The 30 seconds start when the banner shows, not when it was armed
   useEffect(() => {
     if (!open) return
-    const timer = window.setTimeout(() => setOpen(false), HOLD_MS)
     const raf = requestAnimationFrame(() => setEntered(true))
     return () => {
-      window.clearTimeout(timer)
       cancelAnimationFrame(raf)
       setEntered(false)
     }
@@ -68,12 +49,18 @@ export function InstallBanner() {
 
   if (!open) return null
 
+  function dismiss() {
+    sessionStorage.setItem(DISMISS_KEY, new Date().toISOString())
+    setDismissed(true)
+  }
+
   async function handleInstall() {
     const outcome = await promptInstall()
-    setOpen(false)
-    setArmed(false)
     if (outcome === "accepted") {
       showToast("Installed — open TWZ Manager from your home screen.")
+    } else if (outcome === "dismissed") {
+      // "No" to the browser's dialog is a "no" for this visit, not forever
+      dismiss()
     }
   }
 
@@ -109,10 +96,7 @@ export function InstallBanner() {
         </div>
         <button
           type="button"
-          onClick={() => {
-            setOpen(false)
-            setArmed(false)
-          }}
+          onClick={dismiss}
           aria-label="Dismiss"
           className="shrink-0 rounded-md p-1 text-mute transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
         >

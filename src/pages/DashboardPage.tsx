@@ -53,9 +53,13 @@ export default function DashboardPage() {
   const listTitle = singleDay ? "Previous days" : "Daily summary"
 
   /*
-   * One request covering both the chart and the list below it. On a single day
-   * the list still reaches a week back, so the query is widened rather than
-   * fired twice.
+   * Two range reads cover the chart and the list below it: the sales rows
+   * for profit (they keep the full receipt history), and the audit rows for
+   * expenses, advances, and the expected figure the Deposits and History
+   * pages judge a day by. The ledger begins at the audit start day — earlier
+   * days have sales but no audit row, so they show profit and an em dash
+   * rather than a made-up expected. On a single day the list still reaches a
+   * week back, so the query is widened rather than fired twice.
    */
   const spanFrom = dayKey(
     listDays.length > 0 && listDays[listDays.length - 1] < days[0] ? listDays[listDays.length - 1] : days[0] ?? today,
@@ -65,25 +69,36 @@ export default function DashboardPage() {
     () => api.dailySales([store.id], { from: spanFrom, to: spanTo }),
     [store.id, spanFrom, spanTo],
   )
+  const audits = useApi(
+    () => api.dayAudits([store.id], { from: spanFrom, to: spanTo }),
+    [store.id, spanFrom, spanTo],
+  )
   const hourly = useApi(
     () => (singleDay ? api.hourlySales([store.id], dayKey(days[0])) : Promise.resolve([])),
     [store.id, singleDay, singleDay ? dayKey(days[0]) : ""],
   )
 
-  const byDay = new Map((sales.data ?? []).map((row) => [row.day, row]))
-  const inRange = days.map((d) => byDay.get(dayKey(d))).filter((r) => r !== undefined)
+  const salesByDay = new Map((sales.data ?? []).map((row) => [row.day, row]))
+  const auditByDay = new Map((audits.data ?? []).map((row) => [row.day, row]))
+  const auditsInRange = days
+    .map((d) => auditByDay.get(dayKey(d)))
+    .filter((r) => r !== undefined)
 
   /* Every figure on the page is PROFIT — the kita. Gross sales stays on the
      wire but never on screen. */
   const chartData: SalesPoint[] = singleDay
     ? (hourly.data ?? []).map((p) => ({ label: hourLabel(p.hour), amount: p.amount }))
-    : days.map((d) => ({ label: shortDate(d), amount: byDay.get(dayKey(d))?.profit ?? 0 }))
+    : days.map((d) => ({ label: shortDate(d), amount: salesByDay.get(dayKey(d))?.profit ?? 0 }))
 
-  const profitTotal = inRange.reduce((sum, r) => sum + r.profit, 0)
-  const expensesTotal = inRange.reduce((sum, r) => sum + r.expenses, 0)
-  /* House rule: the bank gets profit minus the day's spend; the capital
-     share of the takings stays in the shop to restock */
-  const expectedTotal = profitTotal - expensesTotal
+  const profitTotal = days.reduce(
+    (sum, d) => sum + (salesByDay.get(dayKey(d))?.profit ?? 0),
+    0,
+  )
+  const expensesTotal = auditsInRange.reduce((sum, r) => sum + r.expenses, 0)
+  const advancesTotal = auditsInRange.reduce((sum, r) => sum + r.advances, 0)
+  /* The ledger's own figure, summed — profit minus expenses minus cash
+     advances, the same number Deposits and History judge a day by */
+  const expectedTotal = auditsInRange.reduce((sum, r) => sum + r.expected, 0)
 
   const storeLabel = store.name
   const label = rangeLabel(range, today)
@@ -116,7 +131,7 @@ export default function DashboardPage() {
         className="mt-5 rounded-xl border border-line bg-surface p-5"
         data-rise
       >
-        {sales.error || hourly.error ? (
+        {sales.error || audits.error || hourly.error ? (
           /* A failed read renders as a failure — ₱0.00 standing in for figures
              that never arrived would read as a very bad day that never happened */
           <div role="alert" className="py-10 text-center">
@@ -125,6 +140,7 @@ export default function DashboardPage() {
               type="button"
               onClick={() => {
                 sales.reload()
+                audits.reload()
                 hourly.reload()
               }}
               className="mt-3 inline-flex h-10 items-center justify-center rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
@@ -132,7 +148,7 @@ export default function DashboardPage() {
               Try again
             </button>
           </div>
-        ) : sales.loading ? (
+        ) : sales.loading || audits.loading ? (
           <p className="py-10 text-center text-[14px]">
             <Loading label="Loading sales…" />
           </p>
@@ -159,6 +175,14 @@ export default function DashboardPage() {
                     {peso.format(expensesTotal)}
                   </dd>
                 </div>
+                {advancesTotal > 0 && (
+                  <div>
+                    <dt className="text-[12px] text-mute">Advances</dt>
+                    <dd className="mt-0.5 text-[15px] font-medium tabular-nums text-ink-soft">
+                      {peso.format(advancesTotal)}
+                    </dd>
+                  </div>
+                )}
                 <div>
                   <dt className="text-[12px] text-mute">Expected deposit</dt>
                   <dd className="mt-0.5 text-[15px] font-medium tabular-nums text-ink-soft">
@@ -203,7 +227,8 @@ export default function DashboardPage() {
         <div className="px-5 pb-1 pt-4">
           <h2 className="text-[15px] font-semibold text-ink">{listTitle}</h2>
           <p className="mt-0.5 text-[13px] text-mute">
-            Gross profit, expenses, and the expected bank deposit per day.
+            Gross profit, expenses, and the expected bank deposit per day. Cash advances are
+            netted out of the expected figure.
           </p>
         </div>
 
@@ -214,12 +239,15 @@ export default function DashboardPage() {
           <span className="text-right text-[12px] font-medium text-mute">Expected deposit</span>
         </div>
 
-        {sales.error ? (
+        {sales.error || audits.error ? (
           <p role="alert" className="flex flex-wrap items-center justify-center gap-2 px-5 py-10 text-center text-[13px] text-claret">
             These figures could not load.
             <button
               type="button"
-              onClick={sales.reload}
+              onClick={() => {
+                sales.reload()
+                audits.reload()
+              }}
               className="font-medium underline underline-offset-4"
             >
               Try again
@@ -233,9 +261,17 @@ export default function DashboardPage() {
           <>
           <ul className="divide-y divide-line">
             {pageDays.map((d) => {
-              const row = byDay.get(dayKey(d))
-              const profit = row?.profit ?? 0
-              const spent = row?.expenses ?? 0
+              const salesRow = salesByDay.get(dayKey(d))
+              const audit = auditByDay.get(dayKey(d))
+              const profit = salesRow?.profit ?? audit?.profit ?? 0
+              /* A day with sales but no audit row predates the ledger — an
+                 em dash is honest where a figure would be invented */
+              const spent = audit ? peso.format(audit.expenses) : salesRow ? "—" : peso.format(0)
+              const expected = audit
+                ? peso.format(audit.expected)
+                : salesRow
+                  ? "—"
+                  : peso.format(0)
               return (
                 <li key={dayKey(d)} className={rowGrid}>
                   <span className="text-[13.5px] font-medium text-ink-soft">
@@ -246,11 +282,11 @@ export default function DashboardPage() {
                   </span>
                   <span className="text-[12px] tabular-nums text-mute sm:text-right sm:text-[13px]">
                     <span className="sm:hidden">Expenses </span>
-                    {peso.format(spent)}
+                    {spent}
                   </span>
                   <span className="text-right text-[12px] tabular-nums text-mute sm:text-[13px]">
                     <span className="sm:hidden">Expected </span>
-                    {peso.format(profit - spent)}
+                    {expected}
                   </span>
                 </li>
               )

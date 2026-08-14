@@ -69,6 +69,7 @@ export default function HistoryPage() {
 
   const summaryStats: Stat[] = [
     { label: "Matched", value: String(counts.matched) },
+    { label: "Over", value: String(counts.over) },
     { label: "Discrepancy", value: String(counts.discrepancy) },
     { label: "Pending deposit", value: String(counts.pending) },
     { label: "Open", value: String(counts.open) },

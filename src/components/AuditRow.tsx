@@ -1,8 +1,9 @@
-import { CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react"
+import { ArrowCircleUpIcon, CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react"
 import { peso, rowDate, shortDate } from "../lib/format"
 import { fromDayKey } from "../lib/dateRange"
-import type { DayAudit, DayStatus } from "../lib/api"
-import type { HistoryEntry } from "../lib/historyGroups"
+import type { DayAudit } from "../lib/api"
+import { paintedStatus } from "../lib/historyGroups"
+import type { HistoryEntry, PaintedStatus } from "../lib/historyGroups"
 import { RowMenu } from "./RowMenu"
 
 /*
@@ -31,13 +32,23 @@ export const AUDIT_COLS =
 export const AUDIT_COLS_BRANCH =
   "xl:grid-cols-[minmax(5.25rem,0.9fr)_minmax(7.5rem,1.6fr)_minmax(3.75rem,1fr)_minmax(3.75rem,1fr)_minmax(3.75rem,1fr)_6.5rem_2rem]"
 
-export function StatusChip({ status }: { status: DayStatus }) {
+export function StatusChip({ status }: { status: PaintedStatus }) {
   switch (status) {
     case "matched":
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-sage px-2 py-0.5 text-[11px] font-medium text-sage-ink">
           <CheckCircleIcon size={12} weight="fill" aria-hidden="true" />
           Matched
+        </span>
+      )
+    case "over":
+      /* Deposited more than expected, with the reason on file — the same
+         paper trail as a discrepancy, but the money went IN, so it wears
+         green rather than a warning */
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-sage px-2 py-0.5 text-[11px] font-medium text-sage-ink">
+          <ArrowCircleUpIcon size={12} weight="fill" aria-hidden="true" />
+          Over
         </span>
       )
     case "discrepancy":
@@ -121,7 +132,7 @@ export function AuditRow({
             <span className="text-[14px] font-semibold tabular-nums text-ink">
               {peso.format(audit.expected)}
             </span>
-            <StatusChip status={audit.status} />
+            <StatusChip status={paintedStatus(audit)} />
           </span>
         </div>
         {deposited !== null && (
@@ -174,7 +185,7 @@ export function AuditRow({
           )}
         </span>
         <span className="justify-self-end">
-          <StatusChip status={audit.status} />
+          <StatusChip status={paintedStatus(audit)} />
         </span>
         <span className="justify-self-end">
           <RowMenu label={`Actions for ${forRow}`} items={menuItems} />
@@ -274,7 +285,7 @@ export function AuditGroupRow({
             <span className="text-[14px] font-semibold tabular-nums text-ink">
               {peso.format(expected)}
             </span>
-            <StatusChip status={head.status} />
+            <StatusChip status={paintedStatus(head)} />
           </span>
         </div>
         <div className="mt-1.5 flex items-center justify-between gap-3">
@@ -312,7 +323,7 @@ export function AuditGroupRow({
           {peso.format(deposited)}
         </span>
         <span className="justify-self-end">
-          <StatusChip status={head.status} />
+          <StatusChip status={paintedStatus(head)} />
         </span>
         <span className="justify-self-end">
           <RowMenu

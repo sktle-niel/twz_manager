@@ -35,7 +35,6 @@ export default function AdminShell() {
   const { owner, stores } = useOwnerSession()
   const { signOut } = useAuth()
   const navigate = useNavigate()
-  const allStoreIds = stores.map((s) => s.id)
   const avatar = owner.photoUrl ?? stockAvatar(owner.avatarKind)
   const mainRef = useRef<HTMLElement>(null)
   const { pathname } = useLocation()
@@ -175,7 +174,7 @@ export default function AdminShell() {
       </nav>
 
       {/* Every branch, plus the accounts and branches only the owner sees */}
-      <GlobalSearch storeIds={allStoreIds} owner />
+      <GlobalSearch stores={stores} owner />
     </div>
   )
 }

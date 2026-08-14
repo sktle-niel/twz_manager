@@ -267,6 +267,25 @@ export type FilteredItem = {
   name: string
 }
 
+/** One group of search matches: a handful of items, but the true count */
+export type SearchGroupOf<T> = {
+  items: T[]
+  total: number
+}
+
+/**
+ * What `GET /search` answers: raw wire shapes, grouped, each capped at a few
+ * newest-first items with `total` counting every match. `managers` and
+ * `branches` are always empty for a manager — they are the owner's to see.
+ */
+export type SearchResults = {
+  days: SearchGroupOf<DayAudit>
+  expenses: SearchGroupOf<ExpenseItem>
+  deposits: SearchGroupOf<Deposit>
+  managers: SearchGroupOf<Manager>
+  branches: SearchGroupOf<Store & { managerName: string | null }>
+}
+
 export type SignInDeviceKind = "phone" | "computer"
 
 export type SignInEvent = {

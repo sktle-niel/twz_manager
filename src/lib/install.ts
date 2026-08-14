@@ -68,13 +68,15 @@ export async function promptInstall(): Promise<InstallOutcome> {
   if (!event) return "unavailable"
   await event.prompt()
   const choice = await event.userChoice
+  /* Either way the event is spent — prompt() works once per event. Chrome
+     fires a fresh beforeinstallprompt when it is willing to offer again. */
+  deferred = null
   if (choice.outcome === "accepted") {
-    /* `appinstalled` confirms this moments later; flipping now keeps the
-       button honest in the gap */
-    deferred = null
+    // `appinstalled` confirms this moments later; flipping now keeps the UI honest in the gap
     installed = true
     notify()
     return "accepted"
   }
+  notify()
   return "dismissed"
 }

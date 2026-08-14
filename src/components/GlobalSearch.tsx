@@ -2,19 +2,22 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowLeftIcon, ArrowRightIcon, MagnifyingGlassIcon } from "@phosphor-icons/react"
 import { useSheetEnter } from "../lib/motion"
+import { api } from "../lib/api"
+import type { Store } from "../lib/api"
 import {
   MANAGER_ROUTES,
   OWNER_ROUTES,
   SEARCH_MIN,
   WINDOW_DAYS,
-  buildCorpus,
-  groupResults,
-  runSearch,
+  buildGroups,
 } from "../lib/search"
-import type { SearchRecord, SearchScope } from "../lib/search"
+import type { SearchGroup, SearchRecord, SearchScope } from "../lib/search"
 
 const IS_MAC = typeof navigator !== "undefined" && /mac/i.test(navigator.userAgent)
 const SHORTCUT = IS_MAC ? "⌘K" : "Ctrl K"
+
+/* Long enough to let a word finish, short enough to feel live */
+const DEBOUNCE_MS = 250
 
 function DetailView({
   record,
@@ -82,35 +85,64 @@ function SearchOverlay({ scope, onClose }: { scope: SearchScope; onClose: () => 
 
   useSheetEnter(panelRef, backdropRef, true)
 
-  /* Fetched once, when the overlay opens — the keystrokes only filter it */
-  const [corpus, setCorpus] = useState<SearchRecord[]>([])
-  const [indexing, setIndexing] = useState(true)
+  /*
+   * Each keystroke asks the backend, debounced — the matching lives there
+   * now (GET /search). A sequence number drops answers that arrive after a
+   * newer question was asked.
+   */
+  const [groups, setGroups] = useState<SearchGroup[]>([])
+  const [searching, setSearching] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const seq = useRef(0)
+
+  const tooShort = query.trim().length < SEARCH_MIN
 
   useEffect(() => {
-    let live = true
-    setIndexing(true)
-    buildCorpus(scope, new Date())
-      .then((records) => {
-        if (!live) return
-        setCorpus(records)
-        setIndexing(false)
-      })
-      .catch(() => {
-        if (live) setIndexing(false)
-      })
-    return () => {
-      live = false
+    const asked = ++seq.current
+    if (tooShort) {
+      setGroups([])
+      setSearching(false)
+      setFailed(false)
+      return
     }
-  }, [scope])
 
-  const results = useMemo(() => runSearch(corpus, query), [corpus, query])
-  const groups = useMemo(() => groupResults(results), [results])
+    setSearching(true)
+    const timer = window.setTimeout(() => {
+      api
+        .search(
+          query.trim(),
+          scope.stores.map((s) => s.id),
+        )
+        .then((results) => {
+          if (seq.current !== asked) return
+          setGroups(buildGroups(results, scope))
+          setFailed(false)
+          setSearching(false)
+        })
+        .catch(() => {
+          if (seq.current !== asked) return
+          setGroups([])
+          setFailed(true)
+          setSearching(false)
+        })
+    }, DEBOUNCE_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [query, tooShort, scope])
+
+  const total = useMemo(() => groups.reduce((sum, g) => sum + g.total, 0), [groups])
   /* Flattened in display order, so the arrow keys walk across group borders */
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups])
 
   useEffect(() => {
     setActive(0)
   }, [query])
+
+  /* Results arrive async, so the cursor is clamped when the list shrinks —
+     otherwise the highlight vanishes and Enter goes dead */
+  useEffect(() => {
+    setActive((i) => Math.min(i, Math.max(0, flat.length - 1)))
+  }, [flat.length])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -152,8 +184,6 @@ function SearchOverlay({ scope, onClose }: { scope: SearchScope; onClose: () => 
     onClose()
   }
 
-  const tooShort = query.trim().length < SEARCH_MIN
-
   return (
     <div
       className="fixed inset-0 z-40 flex items-start justify-center px-4 pb-4 pt-[max(3.5rem,8vh)]"
@@ -179,6 +209,7 @@ function SearchOverlay({ scope, onClose }: { scope: SearchScope; onClose: () => 
             autoFocus
             type="search"
             value={query}
+            maxLength={80}
             onChange={(e) => {
               setQuery(e.target.value)
               setOpened(null)
@@ -187,9 +218,9 @@ function SearchOverlay({ scope, onClose }: { scope: SearchScope; onClose: () => 
             aria-label="Search"
             className="h-14 min-w-0 flex-1 bg-transparent text-[16px] text-ink outline-none placeholder:text-mute"
           />
-          {!tooShort && (
+          {!tooShort && !searching && !failed && (
             <span className="shrink-0 text-[12px] tabular-nums text-mute">
-              {results.length} {results.length === 1 ? "result" : "results"}
+              {total} {total === 1 ? "result" : "results"}
             </span>
           )}
         </div>
@@ -207,7 +238,11 @@ function SearchOverlay({ scope, onClose }: { scope: SearchScope; onClose: () => 
                 reference like “712063”
               </p>
             </div>
-          ) : indexing ? (
+          ) : failed ? (
+            <p role="alert" className="px-5 py-8 text-center text-[13.5px] text-mute">
+              Search is unavailable right now. Try again in a moment.
+            </p>
+          ) : searching && groups.length === 0 ? (
             <p className="px-5 py-8 text-center text-[13.5px] text-mute">Searching…</p>
           ) : groups.length === 0 ? (
             <p className="px-5 py-8 text-center text-[13.5px] text-mute">
@@ -279,18 +314,17 @@ function SearchOverlay({ scope, onClose }: { scope: SearchScope; onClose: () => 
  * transform on [data-rise] elements inside <main>, so nothing here is trapped
  * inside a containing block the way a page-level fixed element would be.
  */
-export function GlobalSearch({ storeIds, owner }: { storeIds: string[]; owner: boolean }) {
+export function GlobalSearch({ stores, owner }: { stores: Store[]; owner: boolean }) {
   const [open, setOpen] = useState(false)
 
-  /* Keyed on the joined ids so the scope — and the corpus built from it — stays
-     stable across the parent's re-renders */
-  const storeKey = storeIds.join(",")
+  /* Keyed on the joined ids so the scope stays stable across re-renders */
+  const storeKey = stores.map((s) => s.id).join(",")
   const scope = useMemo<SearchScope>(
     () => ({
-      storeIds: storeKey.split(","),
+      stores,
       routes: owner ? OWNER_ROUTES : MANAGER_ROUTES,
-      includeAccounts: owner,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- storeKey stands in for the stores array's identity
     [storeKey, owner],
   )
 
