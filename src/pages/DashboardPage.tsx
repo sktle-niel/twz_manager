@@ -27,6 +27,10 @@ const rowGrid =
 
 const PAGE_SIZE = 20
 
+/* The backend tops its receipts copy up every minute; asking on the same
+   clock keeps the figures within a minute or two of the tills */
+const LIVE_REFRESH_MS = 60_000
+
 export default function DashboardPage() {
   const { manager, store } = useManagerSession()
   const [range, setRange] = useState<DateRange>(() => presetRange("today", startOfDay(new Date())))
@@ -37,6 +41,7 @@ export default function DashboardPage() {
   const notices = useApi(
     () => branchNotices({ storeId: store.id, managerId: manager.id, now }),
     [store.id, manager.id, now],
+    { refreshMs: LIVE_REFRESH_MS },
   )
 
   useEffect(() => {
@@ -68,14 +73,17 @@ export default function DashboardPage() {
   const sales = useApi(
     () => api.dailySales([store.id], { from: spanFrom, to: spanTo }),
     [store.id, spanFrom, spanTo],
+    { refreshMs: LIVE_REFRESH_MS },
   )
   const audits = useApi(
     () => api.dayAudits([store.id], { from: spanFrom, to: spanTo }),
     [store.id, spanFrom, spanTo],
+    { refreshMs: LIVE_REFRESH_MS },
   )
   const hourly = useApi(
     () => (singleDay ? api.hourlySales([store.id], dayKey(days[0])) : Promise.resolve([])),
     [store.id, singleDay, singleDay ? dayKey(days[0]) : ""],
+    { refreshMs: LIVE_REFRESH_MS },
   )
 
   const salesByDay = new Map((sales.data ?? []).map((row) => [row.day, row]))

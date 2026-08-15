@@ -16,6 +16,14 @@ import { ApiError } from "./api"
  * The key is the fetcher's own source text plus its deps, which is exactly
  * "the same call from the same place"; sign-in and sign-out clear everything,
  * so one account's figures can never flash at another.
+ *
+ * Freshness is not only the mount's problem. Every read quietly re-asks when
+ * the app comes back — window focus, the PWA returning from the background,
+ * the connection returning — throttled so a burst of those events is one
+ * request, not four. A page whose figures move on their own (sales land every
+ * minute) can pass `refreshMs` to also poll on that clock; the poll only runs
+ * while the tab is visible, because a phone in a pocket asking every minute
+ * is battery spent on nobody.
  */
 export type Async<T> = {
   data: T | null
@@ -27,12 +35,20 @@ export type Async<T> = {
 
 const cache = new Map<string, unknown>()
 
+/* A refocus fires focus + visibilitychange together; anything fresher than
+   this is not worth re-asking for */
+const REVALIDATE_AFTER_MS = 10_000
+
 /** Forget every cached read — called when the signed-in identity changes */
 export function clearApiCache(): void {
   cache.clear()
 }
 
-export function useApi<T>(run: () => Promise<T>, deps: unknown[]): Async<T> {
+export function useApi<T>(
+  run: () => Promise<T>,
+  deps: unknown[],
+  opts?: { refreshMs?: number },
+): Async<T> {
   const key = `${run.toString()}|${JSON.stringify(deps)}`
   const [data, setData] = useState<T | null>(() => (cache.get(key) as T | undefined) ?? null)
   const [loading, setLoading] = useState(() => !cache.has(key))
@@ -44,6 +60,7 @@ export function useApi<T>(run: () => Promise<T>, deps: unknown[]): Async<T> {
   runRef.current = run
   const keyRef = useRef(key)
   keyRef.current = key
+  const fetchedAtRef = useRef(0)
 
   useEffect(() => {
     let live = true
@@ -57,6 +74,7 @@ export function useApi<T>(run: () => Promise<T>, deps: unknown[]): Async<T> {
       setLoading(true)
     }
     setError(null)
+    fetchedAtRef.current = Date.now()
     runRef
       .current()
       .then((value) => {
@@ -75,6 +93,32 @@ export function useApi<T>(run: () => Promise<T>, deps: unknown[]): Async<T> {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, nonce])
+
+  /*
+   * The quiet refreshes. Bumping the nonce re-runs the effect above, which
+   * with a warm cache is a silent revalidation — the painted figures stay put
+   * until the fresh ones land. Focus, visibility, and reconnect share one
+   * throttle; the interval carries its own cadence and skips hidden tabs.
+   */
+  const refreshMs = opts?.refreshMs
+  useEffect(() => {
+    const revalidate = () => {
+      if (document.visibilityState !== "visible") return
+      if (Date.now() - fetchedAtRef.current < REVALIDATE_AFTER_MS) return
+      setNonce((n) => n + 1)
+    }
+    window.addEventListener("focus", revalidate)
+    document.addEventListener("visibilitychange", revalidate)
+    window.addEventListener("online", revalidate)
+
+    const timer = refreshMs !== undefined ? window.setInterval(revalidate, refreshMs) : undefined
+    return () => {
+      window.removeEventListener("focus", revalidate)
+      document.removeEventListener("visibilitychange", revalidate)
+      window.removeEventListener("online", revalidate)
+      if (timer !== undefined) window.clearInterval(timer)
+    }
+  }, [refreshMs])
 
   const reload = useCallback(() => setNonce((n) => n + 1), [])
 
