@@ -19,6 +19,10 @@ const rowGrid =
 
 const PAGE_SIZE = 20
 
+/* The backend tops its receipts copy up every minute; asking on the same
+   clock keeps the figures within a minute or two of the tills */
+const LIVE_REFRESH_MS = 60_000
+
 export default function AdminOverviewPage() {
   const { stores } = useOwnerSession()
   const [storeId, setStoreId] = useState("all")
@@ -45,10 +49,12 @@ export default function AdminOverviewPage() {
   const sales = useApi(
     () => api.dailySales(allIds.split(","), { from, to }),
     [allIds, from, to],
+    { refreshMs: LIVE_REFRESH_MS },
   )
   const hourly = useApi(
     () => (singleDay ? api.hourlySales(storeIds, dayKey(days[0])) : Promise.resolve([])),
     [storeIds.join(","), singleDay, singleDay ? dayKey(days[0]) : ""],
+    { refreshMs: LIVE_REFRESH_MS },
   )
 
   const rows = sales.data ?? []
