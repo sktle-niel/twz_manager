@@ -149,7 +149,7 @@ export default function AdminHistoryPage() {
           <div>
             <h2 className="text-[15px] font-semibold text-ink">{scopeLabel}</h2>
             <p className="mt-0.5 text-[13px] text-mute">
-              Expected deposit is gross profit minus logged expenses for the day.
+              Expected deposit is net sales minus logged expenses for the day.
             </p>
           </div>
           <span className="shrink-0 text-[12px] tabular-nums text-mute">

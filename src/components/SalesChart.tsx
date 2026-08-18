@@ -1,5 +1,5 @@
 /*
- * Shared profit chart, used for both a single day (hourly points) and
+ * Shared sales chart, used for both a single day (hourly points) and
  * multi-day ranges (one point per day), by the manager dashboard and the owner
  * overview so the two graphs stay identical.
  *
