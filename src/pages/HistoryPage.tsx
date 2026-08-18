@@ -125,7 +125,7 @@ export default function HistoryPage() {
         <div className="px-5 pb-1 pt-4">
           <h2 className="text-[15px] font-semibold text-ink">{storeName} branch</h2>
           <p className="mt-0.5 text-[13px] text-mute">
-            Expected deposit is gross profit minus logged expenses for the day.
+            Expected deposit is net sales minus logged expenses for the day.
           </p>
         </div>
 

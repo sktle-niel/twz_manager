@@ -80,9 +80,9 @@ export function AuditHeader({ cols, withBranch }: { cols: string; withBranch: bo
     <div className={`mt-2 hidden gap-x-2 border-b border-line px-5 py-2.5 xl:grid ${cols}`}>
       <span className="truncate text-[12px] font-medium text-mute">Date</span>
       {withBranch && <span className="truncate text-[12px] font-medium text-mute">Branch</span>}
-      {/* "Profit", as the stacked rows already call it — the two-word label
-          was the first thing to clip when the branch column took its room */}
-      <span className={headCell}>Profit</span>
+      {/* "Net sales", as the stacked rows already call it — the label needs to
+          stay short enough not to clip when the branch column takes its room */}
+      <span className={headCell}>Net sales</span>
       <span className={headCell}>Expected</span>
       <span className={headCell}>Deposited</span>
       <span className={headCell}>Status</span>
@@ -125,7 +125,7 @@ export function AuditRow({
               {branchName && <span className="text-[12px] text-mute">· {branchName}</span>}
             </span>
             <span className="mt-0.5 block text-[12px] tabular-nums text-mute">
-              Profit {peso.format(audit.profit)}
+              Net sales {peso.format(audit.gross)}
             </span>
           </span>
           <span className="flex shrink-0 flex-col items-end gap-1">
@@ -163,7 +163,7 @@ export function AuditRow({
           <span className="truncate text-[13px] text-mute">{branchName}</span>
         )}
         <span className="truncate text-right text-[13px] tabular-nums text-mute">
-          {peso.format(audit.profit)}
+          {peso.format(audit.gross)}
         </span>
         <span className="truncate text-right text-[13.5px] font-semibold tabular-nums text-ink">
           {peso.format(audit.expected)}
@@ -259,7 +259,7 @@ export function AuditGroupRow({
       : `${shortDate(first)} – ${shortDate(last)}`
   /* The deposit's true span; the range may be showing only part of it */
   const span = head.depositCovers?.length ?? sorted.length
-  const profit = sorted.reduce((sum, a) => sum + a.profit, 0)
+  const netSales = sorted.reduce((sum, a) => sum + a.gross, 0)
   const expected = head.depositExpected ?? sorted.reduce((sum, a) => sum + a.expected, 0)
   const deposited = head.deposited ?? 0
   const online = head.online ?? 0
@@ -278,7 +278,7 @@ export function AuditGroupRow({
               {branchName && <span className="text-[12px] text-mute">· {branchName}</span>}
             </span>
             <span className="mt-0.5 block text-[12px] tabular-nums text-mute">
-              {spanLabel} · Profit {peso.format(profit)}
+              {spanLabel} · Net sales {peso.format(netSales)}
             </span>
           </span>
           <span className="flex shrink-0 flex-col items-end gap-1">
@@ -314,7 +314,7 @@ export function AuditGroupRow({
           <span className="truncate text-[13px] text-mute">{branchName}</span>
         )}
         <span className="truncate text-right text-[13px] tabular-nums text-mute">
-          {peso.format(profit)}
+          {peso.format(netSales)}
         </span>
         <span className="truncate text-right text-[13.5px] font-semibold tabular-nums text-ink">
           {peso.format(expected)}

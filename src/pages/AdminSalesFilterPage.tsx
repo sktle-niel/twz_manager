@@ -8,10 +8,10 @@ import { inputBase, inputOk } from "../components/ui"
 import { useToast } from "../lib/toast"
 
 /*
- * Which items never count toward gross and profit — services and labor,
- * whose money is not the drawer's to deposit. The search asks the backend,
- * which walks the POS catalog once and caches it; this page never pulls the
- * whole catalog, only the matches for what was typed.
+ * Which items never count toward net sales — services and labor, whose money
+ * is not the drawer's to deposit. The search asks the backend, which walks the
+ * POS catalog once and caches it; this page never pulls the whole catalog,
+ * only the matches for what was typed.
  */
 export default function AdminSalesFilterPage() {
   const { showToast } = useToast()
@@ -92,7 +92,7 @@ export default function AdminSalesFilterPage() {
       <div className="mt-6" data-rise>
         <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Sales filter</h1>
         <p className="mt-0.5 text-[13px] text-mute">
-          Items that never count toward gross profit — services and labor are not the drawer's
+          Items that never count toward net sales — services and labor are not the drawer's
           money, so they must not raise the expected deposits.
         </p>
       </div>

@@ -127,7 +127,7 @@ export function buildGroups(results: SearchResults, scope: SearchScope): SearchG
                     ? ("good" as const)
                     : undefined,
             },
-            { label: "Gross profit", value: peso.format(audit.profit) },
+            { label: "Net sales", value: peso.format(audit.gross) },
             { label: "Expenses", value: peso.format(audit.expenses) },
             ...(audit.advances > 0
               ? [{ label: "Advances", value: peso.format(audit.advances) }]

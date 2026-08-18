@@ -59,10 +59,10 @@ export default function DashboardPage() {
 
   /*
    * Two range reads cover the chart and the list below it: the sales rows
-   * for profit (they keep the full receipt history), and the audit rows for
+   * for net sales (they keep the full receipt history), and the audit rows for
    * expenses, advances, and the expected figure the Deposits and History
    * pages judge a day by. The ledger begins at the audit start day — earlier
-   * days have sales but no audit row, so they show profit and an em dash
+   * days have sales but no audit row, so they show net sales and an em dash
    * rather than a made-up expected. On a single day the list still reaches a
    * week back, so the query is widened rather than fired twice.
    */
@@ -92,19 +92,19 @@ export default function DashboardPage() {
     .map((d) => auditByDay.get(dayKey(d)))
     .filter((r) => r !== undefined)
 
-  /* Every figure on the page is PROFIT — the kita. Gross sales stays on the
-     wire but never on screen. */
+  /* Every figure on the page is based on net sales — the branch's actual
+     takings. Gross sales stays on the wire but never on screen. */
   const chartData: SalesPoint[] = singleDay
     ? (hourly.data ?? []).map((p) => ({ label: hourLabel(p.hour), amount: p.amount }))
-    : days.map((d) => ({ label: shortDate(d), amount: salesByDay.get(dayKey(d))?.profit ?? 0 }))
+    : days.map((d) => ({ label: shortDate(d), amount: salesByDay.get(dayKey(d))?.gross ?? 0 }))
 
-  const profitTotal = days.reduce(
-    (sum, d) => sum + (salesByDay.get(dayKey(d))?.profit ?? 0),
+  const netSalesTotal = days.reduce(
+    (sum, d) => sum + (salesByDay.get(dayKey(d))?.gross ?? 0),
     0,
   )
   const expensesTotal = auditsInRange.reduce((sum, r) => sum + r.expenses, 0)
   const advancesTotal = auditsInRange.reduce((sum, r) => sum + r.advances, 0)
-  /* The ledger's own figure, summed — profit minus expenses minus cash
+  /* The ledger's own figure, summed — net sales minus expenses minus cash
      advances, the same number Deposits and History judge a day by */
   const expectedTotal = auditsInRange.reduce((sum, r) => sum + r.expected, 0)
 
@@ -134,7 +134,7 @@ export default function DashboardPage() {
         <DateRangePicker value={range} onChange={setRange} today={today} />
       </div>
 
-      {/* Gross profit for the selected range */}
+      {/* Net sales for the selected range */}
       <section
         className="mt-5 rounded-xl border border-line bg-surface p-5"
         data-rise
@@ -168,9 +168,9 @@ export default function DashboardPage() {
           <>
             <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
               <div>
-                <h2 className="text-[13px] font-medium text-mute">Gross profit</h2>
+                <h2 className="text-[13px] font-medium text-mute">Net sales</h2>
                 <p className="mt-1 text-[28px] font-semibold leading-none tracking-[-0.01em] tabular-nums text-ink">
-                  {peso.format(profitTotal)}
+                  {peso.format(netSalesTotal)}
                 </p>
                 <p className="mt-1.5 text-[13px] text-mute">
                   {label} · {storeLabel}
@@ -205,7 +205,7 @@ export default function DashboardPage() {
                 No sales recorded yet today. The chart fills in as the day goes.
               </p>
             ) : (
-              <SalesChart data={chartData} ariaLabel={`Gross profit chart, ${label}, ${storeLabel}`} />
+              <SalesChart data={chartData} ariaLabel={`Net sales chart, ${label}, ${storeLabel}`} />
             )}
           </>
         )}
@@ -235,14 +235,14 @@ export default function DashboardPage() {
         <div className="px-5 pb-1 pt-4">
           <h2 className="text-[15px] font-semibold text-ink">{listTitle}</h2>
           <p className="mt-0.5 text-[13px] text-mute">
-            Gross profit, expenses, and the expected bank deposit per day. Cash advances are
+            Net sales, expenses, and the expected bank deposit per day. Cash advances are
             netted out of the expected figure.
           </p>
         </div>
 
         <div className="mt-2 hidden gap-x-4 border-b border-line px-5 py-2.5 sm:grid sm:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
           <span className="text-[12px] font-medium text-mute">Date</span>
-          <span className="text-right text-[12px] font-medium text-mute">Gross profit</span>
+          <span className="text-right text-[12px] font-medium text-mute">Net sales</span>
           <span className="text-right text-[12px] font-medium text-mute">Expenses</span>
           <span className="text-right text-[12px] font-medium text-mute">Expected deposit</span>
         </div>
@@ -271,7 +271,7 @@ export default function DashboardPage() {
             {pageDays.map((d) => {
               const salesRow = salesByDay.get(dayKey(d))
               const audit = auditByDay.get(dayKey(d))
-              const profit = salesRow?.profit ?? audit?.profit ?? 0
+              const netSales = salesRow?.gross ?? audit?.gross ?? 0
               /* A day with sales but no audit row predates the ledger — an
                  em dash is honest where a figure would be invented */
               const spent = audit ? peso.format(audit.expenses) : salesRow ? "—" : peso.format(0)
@@ -286,7 +286,7 @@ export default function DashboardPage() {
                     {sameDay(d, today) ? `Today, ${shortDate(d)}` : rowDate(d)}
                   </span>
                   <span className="text-right text-[14px] font-semibold tabular-nums text-ink">
-                    {peso.format(profit)}
+                    {peso.format(netSales)}
                   </span>
                   <span className="text-[12px] tabular-nums text-mute sm:text-right sm:text-[13px]">
                     <span className="sm:hidden">Expenses </span>

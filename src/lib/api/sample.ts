@@ -53,8 +53,7 @@ import type {
   Store,
 } from "./types"
 
-/* Parts margin in the low thirties, wobbling per day like the real ledger
-   does — profit is gross minus what the goods cost */
+/* The app now bases its sales figures on net sales, not a costed margin. */
 const marginFor = (day: string) => 0.3 + ((day.charCodeAt(8) + day.charCodeAt(9)) % 7) / 100
 
 /* Pretend the network exists, so loading states are real during development */
@@ -436,10 +435,9 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
   const profit = Math.round(gross * marginFor(day) * 100) / 100
   const expenses = expenseTotal(storeId, day)
   const advances = advanceTotal(storeId, day)
-  /* The house rule: what goes to the bank is profit minus the day's spend —
-     the capital share of the takings stays in the shop to restock. Advances
-     net out too: that cash left the drawer, whoever pays it back later. */
-  const expected = Math.round((profit - expenses - advances) * 100) / 100
+  /* The house rule: what goes to the bank is net sales minus the day's spend.
+     Advances net out too: that cash left the drawer, whoever pays it back later. */
+  const expected = Math.round((gross - expenses - advances) * 100) / 100
   const diff = daysBack(day)
   const base = { storeId, day, gross, profit, expenses, advances, expected }
 
@@ -749,7 +747,7 @@ export const sampleApi: TwzApi = {
           gross,
           profit,
           expenses,
-          expected: Math.round((profit - expenses) * 100) / 100,
+          expected: Math.round((gross - expenses) * 100) / 100,
         })
       }
     }
@@ -757,17 +755,15 @@ export const sampleApi: TwzApi = {
   },
 
   hourlySales: (storeIds, day) => {
-    /* Profit per hour, like the real endpoint — the charts draw kita */
-    const margin = marginFor(day)
+    /* Net sales per hour, not a margin-adjusted profit figure. */
     const perStore = storeIds.map((id) => hourlyFor(id, day))
     const length = perStore[0]?.length ?? 0
     return settle(
       Array.from({ length }, (_, i) => ({
         hour: perStore[0][i].hour,
-        amount:
-          Math.round(
-            perStore.reduce((sum, list) => sum + (list[i]?.amount ?? 0), 0) * margin * 100,
-          ) / 100,
+        amount: Math.round(
+          perStore.reduce((sum, list) => sum + (list[i]?.amount ?? 0), 0) * 100,
+        ) / 100,
       })),
     )
   },
