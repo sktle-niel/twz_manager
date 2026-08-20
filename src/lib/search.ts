@@ -143,7 +143,6 @@ export function buildGroups(results: SearchResults, scope: SearchScope): SearchG
             ...(overage > 0
               ? [{ label: "Over by", value: peso.format(overage), tone: "good" as const }]
               : []),
-            ...(audit.reference ? [{ label: "Reference", value: audit.reference }] : []),
           ],
           to: routes.day.to,
           toLabel: routes.day.label,
@@ -205,12 +204,11 @@ export function buildGroups(results: SearchResults, scope: SearchScope): SearchG
         return {
           id: `deposit-${dep.id}`,
           kind: "deposit" as const,
-          title: `Deposit ${dep.reference}`,
-          subtitle: `${name(dep.storeId)} · covers ${covers}`,
+          title: `Deposit ${covers}`,
+          subtitle: `${name(dep.storeId)} · ${dep.matched ? "Matched" : "Pending review"}`,
           meta: peso.format(dep.amount),
           details: [
             { label: "Branch", value: name(dep.storeId) },
-            { label: "Reference", value: dep.reference },
             {
               label: "Status",
               value: dep.matched ? "Matched" : overage > 0 ? "Over" : "Discrepancy",

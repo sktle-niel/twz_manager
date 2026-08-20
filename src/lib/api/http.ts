@@ -134,7 +134,6 @@ export const httpApi: TwzApi = {
         day: input.day,
         amount: input.amount,
         ...(input.online ? { online: input.online } : {}),
-        reference: input.reference,
         covers: input.covers,
         ...(input.slipSha ? { slipSha: input.slipSha } : {}),
         ...(input.slipPhash ? { slipPhash: input.slipPhash } : {}),

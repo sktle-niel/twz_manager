@@ -423,13 +423,6 @@ function advanceTotal(storeId: string, day: DayKey): number {
   return advancesFor(storeId, day).reduce((sum, a) => sum + a.amount, 0)
 }
 
-function referenceFor(storeId: string, key: string): string {
-  return String(Math.floor(mulberry32(hashSeed(`ref:${storeId}:${key}`))() * 1_000_000)).padStart(
-    6,
-    "0",
-  )
-}
-
 function auditFor(storeId: string, day: DayKey): DayAudit {
   const gross = grossFor(storeId, day)
   const profit = Math.round(gross * marginFor(day) * 100) / 100
@@ -446,66 +439,59 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
   const uncovered = { depositCovers: null, depositExpected: null }
 
   if (diff <= 0)
-    return { ...base, deposited: null, online: null, ...uncovered, reference: null, slipUrl: null, status: "open" }
+    return { ...base, deposited: null, online: null, ...uncovered, slipUrl: null, status: "open" }
 
   if (diff <= DEPOSIT_TIMELINE.pendingThrough) {
     if (!clearedDays.has(`${storeId}:${day}`))
-      return { ...base, deposited: null, online: null, ...uncovered, reference: null, slipUrl: null, status: "pending" }
+     return { ...base, deposited: null, online: null, ...uncovered, slipUrl: null, status: "pending" }
     // Closed by a deposit recorded this session, whose slip photo we hold
     const covering = (recordedDeposits.get(storeId) ?? []).find((d) => d.covers.includes(day))
     return {
-      ...base,
-      deposited: covering?.amount ?? expected,
-      online: covering?.online ?? 0,
-      depositCovers: covering ? [...covering.covers] : null,
-      depositExpected: covering?.expected ?? null,
-      reference: covering?.reference ?? referenceFor(storeId, day),
-      slipUrl: covering?.slipUrl ?? null,
-      status: covering && !covering.matched ? "discrepancy" : "matched",
+     ...base,
+     deposited: covering?.amount ?? expected,
+     online: covering?.online ?? 0,
+     depositCovers: covering ? [...covering.covers] : null,
+     depositExpected: covering?.expected ?? null,
+     slipUrl: covering?.slipUrl ?? null,
+     status: covering && !covering.matched ? "discrepancy" : "matched",
     }
   }
 
   if (diff === DEPOSIT_TIMELINE.shortDay) {
     return {
-      ...base,
-      deposited: expected - DEPOSIT_TIMELINE.shortfall,
-      online: 0,
-      ...uncovered,
-      reference: referenceFor(storeId, day),
-      slipUrl: SAMPLE_PHOTO,
-      status: "discrepancy",
+     ...base,
+     deposited: expected - DEPOSIT_TIMELINE.shortfall,
+     online: 0,
+     ...uncovered,
+     slipUrl: SAMPLE_PHOTO,
+     status: "discrepancy",
     }
   }
 
   if (DEPOSIT_TIMELINE.matchedPair.includes(diff)) {
-    // Both days went in on one deposit, so they share a reference
-    const newer = dayKey(addDays(fromDayKey(day), diff - DEPOSIT_TIMELINE.matchedPair[1]))
     return {
-      ...base,
-      deposited: expected,
-      online: 0,
-      ...uncovered,
-      reference: referenceFor(storeId, `pair:${newer}`),
-      slipUrl: SAMPLE_PHOTO,
-      status: "matched",
+     ...base,
+     deposited: expected,
+     online: 0,
+     ...uncovered,
+     slipUrl: SAMPLE_PHOTO,
+     status: "matched",
     }
   }
 
   const rand = mulberry32(hashSeed(`status:${storeId}:${day}`))
-  const reference = referenceFor(storeId, day)
   if (rand() > 0.87) {
     const shortfall = 100 + Math.round(rand() * 400)
     return {
-      ...base,
-      deposited: expected - shortfall,
-      online: 0,
-      ...uncovered,
-      reference,
-      slipUrl: SAMPLE_PHOTO,
-      status: "discrepancy" as DayStatus,
+     ...base,
+     deposited: expected - shortfall,
+     online: 0,
+     ...uncovered,
+     slipUrl: SAMPLE_PHOTO,
+     status: "discrepancy" as DayStatus,
     }
   }
-  return { ...base, deposited: expected, online: 0, ...uncovered, reference, slipUrl: SAMPLE_PHOTO, status: "matched" }
+  return { ...base, deposited: expected, online: 0, ...uncovered, slipUrl: SAMPLE_PHOTO, status: "matched" }
 }
 
 function eachDay(range: DayRange): DayKey[] {
@@ -944,7 +930,6 @@ export const sampleApi: TwzApi = {
                 audit.expenses,
                 audit.expected,
                 audit.deposited,
-                audit.reference,
               ),
             )
           ) {
@@ -978,7 +963,6 @@ export const sampleApi: TwzApi = {
               tokens,
               hay(
                 "deposit slip",
-                dep.reference,
                 storeName(storeId),
                 dep.matched ? "Matched" : "Discrepancy",
                 signWord(dep.amount, dep.online, dep.expected),
@@ -1056,8 +1040,6 @@ export const sampleApi: TwzApi = {
       return fail(422, "Check the highlighted fields.", { day: "Enter the deposit date." })
     if (!(input.amount > 0))
       return fail(422, "Check the highlighted fields.", { amount: "Enter an amount above zero." })
-    if (!input.reference.trim())
-      return fail(422, "Check the highlighted fields.", { reference: "Enter the reference number." })
     if (input.covers.length === 0)
       return fail(422, "Select at least one day this deposit covers.")
     // The owner's batching window is enforced, exactly like the real backend
@@ -1089,7 +1071,6 @@ export const sampleApi: TwzApi = {
       amount: input.amount,
       online,
       expected: Math.round(expected * 100) / 100,
-      reference: input.reference,
       covers: [...input.covers],
       slipUrl: URL.createObjectURL(input.slip),
       // Cash on the slip plus what came in online, like the real backend

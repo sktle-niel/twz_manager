@@ -32,7 +32,6 @@ export type BankVerdict = {
 
 export type SlipFields = {
   amount: number | null
-  reference: string | null
   date: Date | null
   /* Tesseract's own 0-100 score for the page */
   confidence: number
@@ -45,7 +44,6 @@ export type SlipFields = {
 
 const EMPTY: SlipFields = {
   amount: null,
-  reference: null,
   date: null,
   confidence: 0,
   text: "",
@@ -63,9 +61,6 @@ const CLIP = 0.02
 /* A deposit is a business figure, not a serial number */
 const AMOUNT_MIN = 100
 const AMOUNT_MAX = 10_000_000
-/* Reference numbers on a validation line */
-const REF_MIN = 5
-const REF_MAX = 20
 /* A slip dated further out than this is not for this deposit */
 const DATE_BACK_DAYS = 120
 const DATE_FORWARD_DAYS = 2
@@ -73,7 +68,6 @@ const DATE_FORWARD_DAYS = 2
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
 
 const AMOUNT_WORDS = ["amount", "total", "cash", "deposit", "credit", "php", "peso"]
-const REF_WORDS = ["ref", "trn", "seq", "trace", "val", "trace", "transaction", "no."]
 
 /*
  * The words of a BDO Network Bank cash transaction slip — the branches' own
@@ -261,23 +255,6 @@ function pickAmount(text: string): number | null {
   return best ? Math.round(best.value) : null
 }
 
-function pickReference(text: string, amount: number | null): string | null {
-  const pattern = /\b\d{5,20}\b/g
-  const amountDigits = amount === null ? "" : String(amount)
-  let best: { value: string; score: number } | null = null
-
-  for (let m = pattern.exec(text); m; m = pattern.exec(text)) {
-    const raw = m[0]
-    if (raw.length < REF_MIN || raw.length > REF_MAX) continue
-    // The amount is not the reference, however it was printed
-    if (raw === amountDigits || raw === `${amountDigits}00`) continue
-
-    const score = nearWord(text, m.index, REF_WORDS) * 3 + Math.min(1, raw.length / 12)
-    if (!best || score > best.score) best = { value: raw, score }
-  }
-  return best?.value ?? null
-}
-
 function plausible(d: Date, now: Date): boolean {
   const days = (now.getTime() - d.getTime()) / 86_400_000
   return days >= -DATE_FORWARD_DAYS && days <= DATE_BACK_DAYS
@@ -326,7 +303,7 @@ function pickDate(text: string, now: Date): Date | null {
  */
 export function __parseForTest(text: string, now: Date) {
   const amount = pickAmount(text)
-  return { amount, reference: pickReference(text, amount), date: pickDate(text, now) }
+  return { amount, date: pickDate(text, now) }
 }
 
 function turned(source: HTMLCanvasElement, deg: 90 | 180 | 270): HTMLCanvasElement {
@@ -385,7 +362,6 @@ export async function readSlip(file: File, now: Date): Promise<SlipFields> {
     const amount = pickAmount(best.text)
     return {
       amount,
-      reference: pickReference(best.text, amount),
       date: pickDate(best.text, now),
       confidence: best.confidence,
       text: best.text,

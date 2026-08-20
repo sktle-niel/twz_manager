@@ -33,10 +33,11 @@ type FieldErrors = {
   amount?: string
   online?: string
   date?: string
-  reference?: string
   days?: string
   slip?: string
   reason?: string
+  depositedAt?: string
+  cashIncludedLastDay?: string
 }
 
 /* Money compares in centavos — float equality on peso sums invents
@@ -119,7 +120,6 @@ export default function DepositsPage() {
   /* GCash / bank-transfer money for the covered days — sales that never
      touched the drawer, declared so the cash deposit does not read as short */
   const [online, setOnline] = useState("")
-  const [reference, setReference] = useState("")
   const [depositDate, setDepositDate] = useState(() => dayKey(new Date()))
   const [slip, setSlip] = useState<File | null>(null)
   const [slipReport, setSlipReport] = useState<SlipReport | null>(null)
@@ -127,7 +127,15 @@ export default function DepositsPage() {
   const [reading, setReading] = useState(false)
   /* Which fields the slip filled, so they can say so and stop saying it the
      moment the manager types over them */
-  const [fromSlip, setFromSlip] = useState({ amount: false, reference: false, date: false })
+  const [fromSlip, setFromSlip] = useState({ amount: false, date: false })
+  // Deposit time for partial-day inclusion (datetime-local string, local time)
+  const [depositedAt, setDepositedAt] = useState<string>(() => {
+    const d = new Date()
+    const tzoffset = d.getTimezoneOffset() * 60000
+    return new Date(Date.now() - tzoffset).toISOString().slice(0, 16)
+  })
+  // Manual cash included from the last covered day (optional)
+  const [cashIncludedLastDay, setCashIncludedLastDay] = useState("")
   /* Fingerprints of slips already filed, so the same photo cannot cover two
      deposits. Session-only until the backend stores them per branch. */
   const [filedSlips, setFiledSlips] = useState<Record<string, KnownSlip[]>>({})
@@ -165,10 +173,15 @@ export default function DepositsPage() {
 
   const isChecked = (d: Date) => checkedDays[`${storeId}:${dayKey(d)}`] ?? true
   const selectedDays = pendingDays.filter(isChecked)
-  const selectedTotal = selectedDays.reduce(
-    (sum, d) => sum + (expectedByDay.get(dayKey(d)) ?? 0),
-    0,
-  )
+  const selectedTotal = selectedDays.reduce((sum, d, i) => {
+    const day = dayKey(d)
+    const isLast = i === selectedDays.length - 1
+    if (isLast && cashIncludedLastDay.trim() !== "") {
+      const v = Number(cashIncludedLastDay.replace(/,/g, ""))
+      return sum + (Number.isFinite(v) ? v : (expectedByDay.get(day) ?? 0))
+    }
+    return sum + (expectedByDay.get(day) ?? 0)
+  }, 0)
   /* Enforced only once the real rule has arrived — blocking on the fallback
      value would refuse selections the owner's actual window allows. The
      backend refuses regardless, so nothing rides on this arriving. */
@@ -229,8 +242,8 @@ export default function DepositsPage() {
   /* Read inside the effect rather than through the dependency list: the
      current field values decide only whether to fill them, and depending on
      them would re-inspect the slip on every keystroke */
-  const typed = useRef({ amount, reference, depositDate })
-  typed.current = { amount, reference, depositDate }
+  const typed = useRef({ amount, depositDate })
+  typed.current = { amount, depositDate }
   const defaultDate = dayKey(new Date())
 
   /* Inspect each slip as it is attached, so a bad one is caught at the moment
@@ -240,7 +253,7 @@ export default function DepositsPage() {
     if (!slip) {
       setSlipReport(null)
       setReading(false)
-      setFromSlip({ amount: false, reference: false, date: false })
+      setFromSlip({ amount: false, date: false })
       return
     }
     let cancelled = false
@@ -260,7 +273,7 @@ export default function DepositsPage() {
            with none of the BDO slip's wording on it cannot be filed */
         setSlipReport((r) => (r ? foldBank(r, fields) : r))
 
-        const filled = { amount: false, reference: false, date: false }
+        const filled = { amount: false, date: false }
         /* Figures off a page that is not the slip are not offered — a grocery
            total landing in the amount field would be worse than nothing */
         if (fields.bank.kind !== "other") {
@@ -269,10 +282,6 @@ export default function DepositsPage() {
           if (fields.amount !== null && typed.current.amount.trim() === "") {
             setAmount(String(fields.amount))
             filled.amount = true
-          }
-          if (fields.reference !== null && typed.current.reference.trim() === "") {
-            setReference(fields.reference)
-            filled.reference = true
           }
           // The date always holds today by default, so "untouched" is the test
           if (fields.date && typed.current.depositDate === defaultDate) {
@@ -302,7 +311,6 @@ export default function DepositsPage() {
       next.online = "Enter the online amount as a number, or leave it empty."
     if (!/^\d{4}-\d{2}-\d{2}$/.test(depositDate)) next.date = "Enter the deposit date."
     else if (depositDate > dayKey(today)) next.date = "The deposit date cannot be in the future."
-    if (!reference.trim()) next.reference = "Enter the reference number from the bank."
     if (selectedDays.length === 0) next.days = "Select at least one day this deposit covers."
     else if (overWindow > 0)
       next.days = `One deposit covers at most ${batchWindowDays} ${
@@ -362,12 +370,15 @@ export default function DepositsPage() {
         day: depositDate,
         amount: value,
         ...(onlineAmount > 0 ? { online: onlineAmount } : {}),
-        reference: reference.trim(),
         covers: selectedDays.map((d) => dayKey(d)),
         slip: slip as File,
         // Advisory only — absent when the device could not compute them
         ...(slipReport?.sha ? { slipSha: slipReport.sha } : {}),
         ...(slipReport?.phash ? { slipPhash: slipReport.phash } : {}),
+        ...(depositedAt ? { depositedAt: new Date(depositedAt).toISOString() } : {}),
+        ...(cashIncludedLastDay
+          ? { cashIncludedLastDay: Number(cashIncludedLastDay.replace(/,/g, "")) }
+          : {}),
         ...(mismatchCents !== 0
           ? {
               discrepancy: {
@@ -396,13 +407,12 @@ export default function DepositsPage() {
       const filed: KnownSlip = {
         sha: slipReport.sha,
         phash: slipReport.phash,
-        label: reference.trim(),
+        label: "deposit-slip",
       }
       setFiledSlips((prev) => ({ ...prev, [storeId]: [...(prev[storeId] ?? []), filed] }))
     }
     setAmount("")
     setOnline("")
-    setReference("")
     setSlip(null)
     setReason("")
     setProof([])
@@ -699,31 +709,48 @@ export default function DepositsPage() {
             </FormField>
           </div>
 
-          <FormField
-            id="deposit-reference"
-            label="Reference number"
-            hint={
-              fromSlip.reference
-                ? "Read from the slip. Check it."
-                : "The transaction or slip number from the bank."
-            }
-            error={errors.reference}
-          >
-            <input
-              id="deposit-reference"
-              type="text"
-              placeholder="e.g. 004512"
-              value={reference}
-              onChange={(e) => {
-                setReference(e.target.value)
-                setFromSlip((f) => ({ ...f, reference: false }))
-              }}
-              aria-required="true"
-              aria-invalid={Boolean(errors.reference)}
-              aria-describedby={errors.reference ? "deposit-reference-error" : undefined}
-              className={`${inputBase} ${errors.reference ? inputBad : inputOk}`}
-            />
-          </FormField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              id="deposit-time"
+              label="Deposit time (optional)"
+              hint="Sales on the last covered day after this time are not included unless you enter an amount below."
+              error={errors.depositedAt}
+            >
+              <input
+                id="deposit-time"
+                type="datetime-local"
+                value={depositedAt}
+                onChange={(e) => setDepositedAt(e.target.value)}
+                className={`${inputBase} ${errors.depositedAt ? inputBad : inputOk}`}
+              />
+            </FormField>
+
+            <FormField
+              id="cash-included-last-day"
+              label="Cash from last day to include (optional)"
+              hint="If the deposit happened during the last day, enter how much cash from that day was included. Leave blank to include the full day."
+              error={errors.cashIncludedLastDay}
+            >
+              <div className="relative">
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3.5 top-1/2 mt-1 -translate-y-1/2 text-[15px] text-mute"
+                >
+                  ₱
+                </span>
+                <input
+                  id="cash-included-last-day"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={cashIncludedLastDay}
+                  onChange={(e) => setCashIncludedLastDay(e.target.value)}
+                  aria-invalid={Boolean(errors.cashIncludedLastDay)}
+                  aria-describedby={errors.cashIncludedLastDay ? "cash-included-last-day-error" : undefined}
+                  className={`${inputBase} pl-8 ${errors.cashIncludedLastDay ? inputBad : inputOk}`}
+                />
+              </div>
+            </FormField>
+          </div>
 
           <div>
             <PhotoAttach

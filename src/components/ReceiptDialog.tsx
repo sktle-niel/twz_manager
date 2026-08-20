@@ -90,7 +90,6 @@ export function ReceiptDialog({
     /* From a batch row there is no single day in focus — the covers line and
        the breakdown below carry the dates instead */
     ...(breakdown ? [] : [{ label: "Audited day", value: rowDate(date) }]),
-    { label: "Reference no.", value: audit.reference ?? "None yet" },
     ...(multi
       ? [
           {
