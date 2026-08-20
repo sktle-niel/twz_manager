@@ -141,7 +141,7 @@ export async function branchNotices({
         diffCents === null
           ? "A deposit did not match"
           : `Deposit ${diffCents < 0 ? "short" : "over"} by ${peso.format(Math.abs(diffCents) / 100)}`,
-      detail: `${rowDate(fromDayKey(off.day))} · reference ${off.reference}.`,
+      detail: `${rowDate(fromDayKey(off.day))} · review the discrepancy in history.`,
       to: "/history",
       action: "View in history",
     })

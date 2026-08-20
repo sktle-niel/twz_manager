@@ -62,9 +62,8 @@ export function groupByDeposit(audits: DayAudit[]): HistoryEntry[] {
       continue
     }
 
-    /* The batch's identity is the deposit itself: same branch, same
-       reference, same covered span */
-    const key = `${audit.storeId}|${audit.reference ?? ""}|${covers.join(",")}`
+    /* The batch's identity is the deposit span itself: same branch, same covered days */
+    const key = `${audit.storeId}|${covers.join(",")}`
     const entry = open.get(key)
     if (entry) {
       entry.audits.push(audit)

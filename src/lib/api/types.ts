@@ -204,8 +204,6 @@ export type DayAudit = {
   /** The expected sum that deposit was judged against, frozen at recording;
       null before a deposit, or on deposits from before this was stored */
   depositExpected: number | null
-  /** Bank reference of the covering deposit */
-  reference: string | null
   /** Slip photo of the covering deposit; null until one exists */
   slipUrl: string | null
   status: DayStatus
@@ -224,13 +222,16 @@ export type Deposit = {
   /** The expected sum over the covered days, frozen when the deposit was
       judged; null on deposits recorded before this was stored */
   expected: number | null
-  reference: string
   /** Audited days this one deposit closes, oldest first */
   covers: DayKey[]
   /** The stored slip photo */
   slipUrl: string
   /** Cash plus online against the expected total, judged in centavos */
   matched: boolean
+  /** ISO 8601 instant of when the deposit was recorded */
+  depositedAt?: string | null
+  /** Manual override amount included from the last covered day */
+  cashIncludedLastDay?: number | null
 }
 
 export type NewDeposit = {
@@ -239,9 +240,12 @@ export type NewDeposit = {
   amount: number
   /** GCash / bank-transfer money for the covered days; omitted means none */
   online?: number
-  reference: string
   covers: DayKey[]
   slip: File
+  /** ISO 8601 instant of when the deposit was recorded (optional) */
+  depositedAt?: string
+  /** Manual amount of cash from the last covered day to include (optional) */
+  cashIncludedLastDay?: number
   /**
    * Advisory fingerprints of the slip photo, computed client-side so an
    * obvious duplicate is caught before upload. The backend recomputes the
