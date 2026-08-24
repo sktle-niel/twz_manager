@@ -7,12 +7,15 @@ import {
   PlugsConnectedIcon,
   PlusIcon,
   ShieldCheckIcon,
+  ShieldWarningIcon,
   StorefrontIcon,
   TagIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react"
 import type { Icon } from "@phosphor-icons/react"
 import { ApiError, api } from "../lib/api"
+import { Loading } from "../components/Loading"
+import { timeAgo } from "../lib/format"
 import type { ExpenseCategoryConfig } from "../lib/api"
 import { useApi } from "../lib/useApi"
 import { useOwnerSession } from "../lib/session"
@@ -68,6 +71,71 @@ type PinErrors = { currentPin?: string; newPin?: string; confirmPin?: string; fo
  * The step refuses to close until the owner has actually saved a copy, because
  * "I'll remember it" is how a shop ends up locked out of its own accounts.
  */
+/*
+ * Who has been knocking.
+ *
+ * The sign-in throttle already stops a guessing run after five tries, but it
+ * stops it silently — so a patient attempt against a branch account looked
+ * exactly like nothing happening. These are the attempts that failed, and
+ * "Real account" marks the ones aimed at a username that exists, which is the
+ * difference between a manager mistyping and somebody working a list.
+ */
+function FailedSignInsCard() {
+  const attempts = useApi(() => api.failedSignIns(), [])
+  /* Frozen so the relative times hold still between renders */
+  const [now] = useState(() => new Date())
+
+  const rows = attempts.data ?? []
+
+  return (
+    <SettingCard
+      icon={ShieldWarningIcon}
+      title="Failed sign-ins"
+      subtitle="Recent attempts that did not work, newest first."
+    >
+      {attempts.error ? (
+        <p role="alert" className="text-[13.5px] text-mute">
+          The attempt log could not load.
+        </p>
+      ) : attempts.loading && attempts.data === null ? (
+        <Loading label="Loading attempts" />
+      ) : rows.length === 0 ? (
+        <p className="text-[13.5px] text-mute">
+          No failed attempts on record. Nothing has been rattling the door.
+        </p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {rows.map((a) => (
+            <li key={a.id} className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="truncate text-[13.5px] font-medium text-ink">
+                    {a.identifier}
+                  </span>
+                  {a.known && (
+                    /* The signal worth reading: somebody aimed at a real
+                       account, not a name they invented */
+                    <span className="shrink-0 rounded-full bg-claret/10 px-2 py-0.5 text-[10.5px] font-medium text-claret">
+                      Real account
+                    </span>
+                  )}
+                </div>
+                <p className="mt-0.5 text-[12.5px] leading-[1.5] text-mute">
+                  {a.device} · {a.platform}
+                </p>
+                <p className="text-[12.5px] leading-[1.5] text-mute">
+                  <span className="font-mono text-[12px] text-ink-soft">{a.ip}</span>
+                </p>
+                <p className="mt-0.5 text-[12px] text-mute">{timeAgo(new Date(a.at), now)}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SettingCard>
+  )
+}
+
 function RecoveryPinCard() {
   const { showToast } = useToast()
   const status = useApi(() => api.resetPin(), [])
@@ -616,6 +684,8 @@ export default function AdminSettingsPage() {
         </SettingCard>
 
         <RecoveryPinCard />
+
+        <FailedSignInsCard />
       </div>
     </>
   )

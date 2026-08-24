@@ -19,6 +19,7 @@ import type {
   AdvanceItem,
   AdvancePatch,
   DailySales,
+  FailedSignInEvent,
   ItemSales,
   DayAudit,
   DayKey,
@@ -69,6 +70,13 @@ export type TwzApi = {
   signIn(identifier: string, password: string, remember?: boolean): Promise<Session>
   signOut(): Promise<void>
   signIns(accountId: string): Promise<SignInEvent[]>
+
+  /**
+   * Recent sign-in attempts that failed, newest first. Owner only — the
+   * throttle already stops a guessing run, but it stops it silently, and
+   * this is how the owner finds out it happened at all.
+   */
+  failedSignIns(): Promise<FailedSignInEvent[]>
 
   /* ---- the signed-in account ---- */
 

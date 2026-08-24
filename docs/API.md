@@ -228,7 +228,7 @@ branch.
 Matching: the query splits into tokens and **every token must appear
 somewhere** in a record — its dates spelled several ways ("july",
 "2026-08-03", "8/3/2026"), its amounts as bare digits ("480"), its words
-("meals", "discrepancy", a deposit reference). A recognised date ("july 3",
+("meals", "discrepancy", a branch name). A recognised date ("july 3",
 "7/3/2026") narrows by the record's own day instead of substring-matching;
 accounts and branches carry no day of their own, so a dated query skips them.
 
@@ -267,6 +267,28 @@ figure a deposit is matched against always comes from `/audits`.
 partial while the day is open. Hours with no sales have no point. `amount` is
 **net sales** for the hour — the same base every chart draws and the same base
 `/audits` reconciles deposits against.
+
+### `GET /sales/items?storeId=…&from=…&to=…`
+**200** `ItemSales` — what was sold, line by line, for ONE branch over the
+range. Grouped by SKU and split the way the ledger splits it:
+
+```json
+{
+  "parts": [{ "sku": "OF-HON", "name": "Oil filter, Honda", "quantity": 14, "amount": 2800 }],
+  "labor": [{ "sku": "17137", "name": "LABOR", "quantity": 4, "amount": 400 }],
+  "partsTotal": 2800,
+  "laborTotal": 400
+}
+```
+
+`parts` is what makes net sales; `labor` is the services and labor that never
+do. Both are money that crossed the counter — only `partsTotal` is the
+branch's to bank, and showing the second beside the first is the point of the
+endpoint. `sku` is null on a line that carried none. Quantities and amounts
+are **signed**, so a refunded line subtracts itself.
+
+Line items are stored from the moment a receipt is synced, so a range from
+before the feature existed comes back empty rather than wrong.
 
 ## Expenses
 
@@ -334,13 +356,15 @@ Body: any of `{ employee, amount, note }`. **200** the updated `AdvanceItem`.
 ### `GET /audits?storeIds=…&from=…&to=…`
 **200** `DayAudit[]` — one per store per day. `status` progresses
 `open` (today) → `pending` (audited, no deposit) → `matched` / `discrepancy`.
-`deposited`, `online`, `reference`, and `slipUrl` come from the covering
+`deposited`, `online`, and `slipUrl` come from the covering
 deposit, null until one exists. Rows carry both `gross` (net sales) and
 `profit` (the margin, reported only), plus the day's `expenses` and
 `advances` totals; the pages display net sales, and
 `expected = net sales - expenses - advances` (the house rule) is the amount the
 covering deposit's cash **plus its declared online money** is matched
-against.
+against. `proofUrls` carries whatever the manager photographed to explain a
+difference — null until a deposit covers the day, empty when they attached
+nothing.
 
 **A deposit covering several days repeats on every covered row**, so each row
 also carries the batch context that keeps that honest: `depositCovers` (every
@@ -373,7 +397,6 @@ covered days), newest first.
   "day": "2026-08-04",
   "amount": 43110.5,
   "online": 1500,
-  "reference": "004512",
   "covers": ["2026-08-01", "2026-08-02"],
   "slipSha": "…hex…",
   "slipPhash": "…hex…",
@@ -435,6 +458,27 @@ account moves the mailbox — one endpoint never serves two accounts.
 
 ### `DELETE /push/subscriptions`
 Body `{ endpoint }`. **204.** Only the mailbox's current holder may delete it.
+
+### `GET /security/failed-sign-ins` (owner only)
+**200** `FailedSignInEvent[]`, newest first, the most recent 25.
+
+```json
+[{ "id": "…", "identifier": "marvin.deocampo", "ip": "112.198.44.10",
+   "device": "Android phone", "platform": "Android 14", "kind": "phone",
+   "known": true, "at": "2026-08-24T03:06:11Z" }]
+```
+
+The sign-in throttle stops a guessing run after five tries per
+identifier+IP — but it stops it silently, so nothing told the owner it
+happened. These rows do.
+
+`known` says whether that username is a real account, which is the difference
+between a manager mistyping and somebody working through a list. It is owner
+only for exactly that reason: it is the fact `POST /session` refuses to reveal
+to whoever is knocking, which answers the same message either way.
+
+No password is stored, hashed or otherwise. The table keeps the newest 200
+rows and drops the rest.
 
 ## Settings (owner only)
 

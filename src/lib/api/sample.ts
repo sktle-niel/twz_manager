@@ -432,7 +432,13 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
      Advances net out too: that cash left the drawer, whoever pays it back later. */
   const expected = Math.round((gross - expenses - advances) * 100) / 100
   const diff = daysBack(day)
-  const base = { storeId, day, gross, profit, expenses, advances, expected }
+  /* proofUrls rides on base so every branch below carries it; the
+     discrepancy cases then supply a real photo, because that is the only
+     time a manager attaches one */
+  const base = {
+    storeId, day, gross, profit, expenses, advances, expected,
+    proofUrls: null as string[] | null,
+  }
 
   /* Seeded history has no covering-deposit record to point at, so its rows
      carry no batch fields — only a deposit recorded this session does */
@@ -453,6 +459,7 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
      depositCovers: covering ? [...covering.covers] : null,
      depositExpected: covering?.expected ?? null,
      slipUrl: covering?.slipUrl ?? null,
+     proofUrls: covering?.proofUrls ?? null,
      status: covering && !covering.matched ? "discrepancy" : "matched",
     }
   }
@@ -464,6 +471,7 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
      online: 0,
      ...uncovered,
      slipUrl: SAMPLE_PHOTO,
+     proofUrls: [SAMPLE_PHOTO],
      status: "discrepancy",
     }
   }
@@ -488,6 +496,7 @@ function auditFor(storeId: string, day: DayKey): DayAudit {
      online: 0,
      ...uncovered,
      slipUrl: SAMPLE_PHOTO,
+     proofUrls: [SAMPLE_PHOTO],
      status: "discrepancy" as DayStatus,
     }
   }
@@ -577,6 +586,31 @@ export const sampleApi: TwzApi = {
   },
 
   signIns: (accountId) => settle(signInLog(accountId)),
+  /* Two attempts, one against a real name and one against nothing, so the
+     card shows both states it can render */
+  failedSignIns: () =>
+    settle([
+      {
+        id: "fsi-1",
+        identifier: "marvin.deocampo",
+        ip: "112.198.44.10",
+        device: "Android phone",
+        platform: "Android 14",
+        kind: "phone" as const,
+        known: true,
+        at: new Date(Date.now() - 22 * 60_000).toISOString(),
+      },
+      {
+        id: "fsi-2",
+        identifier: "admin",
+        ip: "45.61.130.7",
+        device: "Windows computer",
+        platform: "Windows 10",
+        kind: "computer" as const,
+        known: false,
+        at: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+      },
+    ]),
 
   setManagerPassword: (managerId, pin, password) => {
     if (pin !== resetPin) {
@@ -1116,6 +1150,7 @@ export const sampleApi: TwzApi = {
       expected: Math.round(expected * 100) / 100,
       covers: [...input.covers],
       slipUrl: URL.createObjectURL(input.slip),
+      proofUrls: (input.discrepancy?.proof ?? []).map((f: File) => URL.createObjectURL(f)),
       // Cash on the slip plus what came in online, like the real backend
       matched:
         Math.round(input.amount * 100) + Math.round(online * 100) === Math.round(expected * 100),
