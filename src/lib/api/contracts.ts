@@ -19,6 +19,7 @@ import type {
   AdvanceItem,
   AdvancePatch,
   DailySales,
+  ItemSales,
   DayAudit,
   DayKey,
   Deposit,
@@ -107,6 +108,15 @@ export type TwzApi = {
   dailySales(storeIds: string[], range: DayRange): Promise<DailySales[]>
   /** Today's running total, hour by hour; partial while the day is open */
   hourlySales(storeIds: string[], day: DayKey): Promise<HourPoint[]>
+
+  /**
+   * What was sold, item by item, for ONE branch over a range — the
+   * manager's page, and the owner reads any branch through the same door.
+   * `labor` is kept out of net sales exactly as the ledger keeps it out,
+   * and returned beside it so the money that is not the branch's to
+   * deposit is visible rather than merely absent.
+   */
+  itemSales(storeId: string, range: DayRange): Promise<ItemSales>
 
   /* ---- expenses ---- */
 

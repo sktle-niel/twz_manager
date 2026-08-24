@@ -16,6 +16,7 @@ import type {
   ExpenseItem,
   ExpensePatch,
   HourPoint,
+  ItemSales,
   Manager,
   NewDeposit,
   NewExpense,
@@ -76,6 +77,7 @@ export const httpApi: TwzApi = {
 
   dailySales: (storeIds, r) => get<DailySales[]>("/sales/daily", { storeIds, ...range(r) }),
   hourlySales: (storeIds, day) => get<HourPoint[]>("/sales/hourly", { storeIds, day }),
+  itemSales: (storeId, r) => get<ItemSales>("/sales/items", { storeId, ...range(r) }),
 
   expenses: (storeId, r) => get<ExpenseItem[]>("/expenses", { storeId, ...range(r) }),
   addExpenses: (items: NewExpense[]) =>

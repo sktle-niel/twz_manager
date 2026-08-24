@@ -6,6 +6,7 @@ import {
   PlusIcon,
   ReceiptIcon,
   SignOutIcon,
+  StorefrontIcon,
   SquaresFourIcon,
   UserCircleIcon,
 } from "@phosphor-icons/react"
@@ -21,6 +22,7 @@ import { GlobalSearch } from "./GlobalSearch"
 
 const NAV: { to: string; label: string; icon: Icon; end?: boolean }[] = [
   { to: "/", label: "Dashboard", icon: SquaresFourIcon, end: true },
+  { to: "/sales", label: "Sales", icon: StorefrontIcon },
   { to: "/expenses", label: "Expenses", icon: ReceiptIcon },
   { to: "/deposits", label: "Deposits", icon: BankIcon },
   { to: "/history", label: "History", icon: ClockCounterClockwiseIcon },
