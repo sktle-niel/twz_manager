@@ -251,21 +251,22 @@ and an outage — see LOYVERSE.md.
 **200** `DailySales[]` — one row per requested store per day that has sales;
 a day with none simply has no row.
 
-`profit` (gross minus what the goods on the receipts cost the shop, Loyverse
-line-item costs, refunds netted) is THE figure — every chart, table, and
-headline draws it. `gross` stays on the wire but is never displayed.
+`gross` is **net sales** — what the tills took with refunds netted and the
+excluded service/labor lines removed. It is THE figure: every chart, table,
+and headline draws it. `profit` (net sales minus what the goods on the
+receipts cost the shop, from Loyverse's line-item costs) stays on the wire as
+a reporting figure; nothing reconciles against the margin.
 
-**The house rule:** `expected = profit - expenses`. The capital share of the
-takings stays in the shop to restock; what goes to the bank is the profit
-less the day's spend. Sales rows carry no expense join, so their `expected`
-reads `profit` as-is — the authoritative per-day figure a deposit is matched
-against always comes from `/audits`.
+**The house rule:** `expected = net sales - expenses`. The day's spend comes
+out of the takings and the rest goes to the bank. Sales rows carry no expense
+join, so their `expected` reads `gross` as-is — the authoritative per-day
+figure a deposit is matched against always comes from `/audits`.
 
 ### `GET /sales/hourly?storeIds=…&day=…`
 **200** `HourPoint[]` summed across the requested stores, branch-local hours,
 partial while the day is open. Hours with no sales have no point. `amount` is
-**gross profit** for the hour, matching every figure the charts draw — gross
-remains the deposit number, on `/audits` and in `DailySales.gross`.
+**net sales** for the hour — the same base every chart draws and the same base
+`/audits` reconciles deposits against.
 
 ## Expenses
 
@@ -334,9 +335,10 @@ Body: any of `{ employee, amount, note }`. **200** the updated `AdvanceItem`.
 **200** `DayAudit[]` — one per store per day. `status` progresses
 `open` (today) → `pending` (audited, no deposit) → `matched` / `discrepancy`.
 `deposited`, `online`, `reference`, and `slipUrl` come from the covering
-deposit, null until one exists. Rows carry both `gross` and `profit`, plus
-the day's `expenses` and `advances` totals; the pages display profit, and
-`expected = profit - expenses - advances` (the house rule) is the amount the
+deposit, null until one exists. Rows carry both `gross` (net sales) and
+`profit` (the margin, reported only), plus the day's `expenses` and
+`advances` totals; the pages display net sales, and
+`expected = net sales - expenses - advances` (the house rule) is the amount the
 covering deposit's cash **plus its declared online money** is matched
 against.
 

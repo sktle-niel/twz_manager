@@ -166,15 +166,17 @@ export type HourPoint = {
 export type DailySales = {
   storeId: string
   day: DayKey
-  /** Money taken at the till, net of refunds — kept on the wire, not displayed */
+  /** Net sales: taken at the till, refunds and excluded service/labor lines
+      netted out. THE figure — every chart, table, and headline draws it */
   gross: number
-  /** Gross minus what the goods cost the shop: THE figure, everywhere */
+  /** Net sales minus what the goods cost the shop: the margin, reported only */
   profit: number
   expenses: number
   /**
-   * profit - expenses, the house rule: the capital share of the takings
-   * stays in the shop to restock, so the bank gets the profit less the
-   * day's spend. The authoritative per-day figure lives on DayAudit.
+   * net sales - expenses, the house rule: the day's spend comes out of the
+   * takings and the rest goes to the bank. Sales rows carry no expense join,
+   * so this reads `gross` as-is — the authoritative per-day figure lives on
+   * DayAudit.
    */
   expected: number
 }
@@ -184,14 +186,14 @@ export type DayStatus = "open" | "pending" | "matched" | "discrepancy"
 export type DayAudit = {
   storeId: string
   day: DayKey
-  /** Money taken at the till — kept on the wire, not displayed */
+  /** Net sales for the day — the figure the audit pages show */
   gross: number
-  /** Gross minus what the goods cost: the figure the audit pages show */
+  /** Net sales minus what the goods cost: the margin, reported only */
   profit: number
   expenses: number
   /** Cash advances drawn against pay that day — out of the drawer like spend */
   advances: number
-  /** profit - expenses - advances: what the deposit must answer (house rule) */
+  /** net sales - expenses - advances: what the deposit must answer (house rule) */
   expected: number
   /** Cash on the covering deposit's slip; null until a deposit covers the day */
   deposited: number | null
