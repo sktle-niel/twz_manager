@@ -15,6 +15,7 @@ import type {
   ExpenseCategoryConfig,
   ExpenseItem,
   ExpensePatch,
+  FailedSignInEvent,
   HourPoint,
   ItemSales,
   Manager,
@@ -43,6 +44,7 @@ export const httpApi: TwzApi = {
     send<Session>("POST", "/session", { identifier, password, remember }),
   signOut: () => send<void>("DELETE", "/session"),
   signIns: (accountId) => get<SignInEvent[]>(`/accounts/${accountId}/sign-ins`),
+  failedSignIns: () => get<FailedSignInEvent[]>("/security/failed-sign-ins"),
 
   setManagerPassword: (managerId, pin, password) =>
     send<void>("PUT", `/managers/${managerId}/password`, { pin, password }),

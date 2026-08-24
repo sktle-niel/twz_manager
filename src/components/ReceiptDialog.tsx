@@ -32,13 +32,15 @@ export function ReceiptDialog({
 }) {
   const backdropRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
-  const [zoomed, setZoomed] = useState(false)
+  /* Holds the URL being shown full screen — the slip, or one of the
+     discrepancy photos — so one lightbox serves both */
+  const [zoomed, setZoomed] = useState<string | null>(null)
 
   useSheetEnter(panelRef, backdropRef, target)
 
   // A fresh slip starts at the card view, not wherever the last one was left
   useEffect(() => {
-    setZoomed(false)
+    setZoomed(null)
   }, [target])
 
   useEffect(() => {
@@ -46,7 +48,7 @@ export function ReceiptDialog({
     const onKey = (e: KeyboardEvent) => {
       // Escape peels one layer: the full-screen photo first, then the dialog
       if (e.key === "Escape") {
-        if (zoomed) setZoomed(false)
+        if (zoomed) setZoomed(null)
         else onClose()
       }
     }
@@ -171,7 +173,7 @@ export function ReceiptDialog({
                the full screen, one tap away */
             <button
               type="button"
-              onClick={() => setZoomed(true)}
+              onClick={() => setZoomed(audit.slipUrl)}
               aria-label="Open the slip photo full screen"
               className="relative block w-full cursor-zoom-in"
             >
@@ -194,6 +196,37 @@ export function ReceiptDialog({
             </div>
           )}
         </div>
+
+        {/* The evidence behind a difference. The app has collected these
+            since deposits shipped and never shown them, so a manager's
+            explanation arrived without the photograph backing it. */}
+        {audit.proofUrls && audit.proofUrls.length > 0 && (
+          <div className="px-5 pt-4">
+            <h3 className="text-[12px] font-medium text-mute">
+              {audit.proofUrls.length === 1
+                ? "Photo explaining the difference"
+                : `${audit.proofUrls.length} photos explaining the difference`}
+            </h3>
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {audit.proofUrls.map((url, i) => (
+                <li key={url}>
+                  <button
+                    type="button"
+                    onClick={() => setZoomed(url)}
+                    aria-label={`Open explanation photo ${i + 1} full screen`}
+                    className="block cursor-zoom-in overflow-hidden rounded-lg border border-line"
+                  >
+                    <img
+                      src={url}
+                      alt=""
+                      className="h-20 w-20 bg-canvas object-cover"
+                    />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <dl className="mt-4 divide-y divide-line border-t border-line">
           {rows.map((r) => (
@@ -234,11 +267,15 @@ export function ReceiptDialog({
         )}
       </div>
 
-      {zoomed && audit.slipUrl && (
+      {zoomed && (
         <ImageLightbox
-          src={audit.slipUrl}
-          alt={`Deposit slip for ${rowDate(date)}, ${branchName}`}
-          onClose={() => setZoomed(false)}
+          src={zoomed}
+          alt={
+            zoomed === audit.slipUrl
+              ? `Deposit slip for ${rowDate(date)}, ${branchName}`
+              : `Photo explaining the difference on ${rowDate(date)}, ${branchName}`
+          }
+          onClose={() => setZoomed(null)}
         />
       )}
     </div>,

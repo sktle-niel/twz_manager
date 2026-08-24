@@ -230,6 +230,9 @@ export type DayAudit = {
   depositExpected: number | null
   /** Slip photo of the covering deposit; null until one exists */
   slipUrl: string | null
+  /** What the manager photographed to explain a difference; null until a
+      deposit covers the day, empty when they attached nothing */
+  proofUrls: string[] | null
   status: DayStatus
 }
 
@@ -250,6 +253,8 @@ export type Deposit = {
   covers: DayKey[]
   /** The stored slip photo */
   slipUrl: string
+  /** Photos the manager attached to explain a difference; empty when none */
+  proofUrls: string[]
   /** Cash plus online against the expected total, judged in centavos */
   matched: boolean
   /** ISO 8601 instant of when the deposit was recorded */
@@ -315,6 +320,25 @@ export type SearchResults = {
 }
 
 export type SignInDeviceKind = "phone" | "computer"
+
+/**
+ * A sign-in attempt that did not work. Owner-only: `known` says whether the
+ * username exists, which is exactly the fact the sign-in form refuses to
+ * reveal to whoever is knocking.
+ */
+export type FailedSignInEvent = {
+  id: string
+  /** What was typed into the username field */
+  identifier: string
+  ip: string
+  device: string
+  platform: string
+  kind: SignInDeviceKind
+  /** True when that username is a real account */
+  known: boolean
+  /** ISO 8601 instant */
+  at: string
+}
 
 export type SignInEvent = {
   id: string
