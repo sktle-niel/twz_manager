@@ -35,8 +35,35 @@ export function initials(name: string): string {
   return (first + last).toUpperCase()
 }
 
+/*
+ * The shop's clock. Every instant the API sends is UTC (ISO-8601 Zulu), and
+ * every branch is in the Philippines — so a time is read on Manila's clock
+ * whatever the device is set to. Without this a phone left on another
+ * timezone labels last night's entry with the wrong hour, and nothing on
+ * screen says so.
+ */
+const SHOP_TZ = "Asia/Manila"
+
 export function clockLabel(d: Date): string {
-  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+  return d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: SHOP_TZ,
+  })
+}
+
+/*
+ * The date an instant fell on, on the shop's clock. Separate from shortDate
+ * because that one formats a calendar day the caller already built from
+ * y/m/d parts — pinning a timezone onto it would shift the day instead of
+ * fixing it. This one takes a real moment, where the timezone is the point.
+ */
+export function instantDate(d: Date): string {
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: SHOP_TZ,
+  })
 }
 
 /*
@@ -52,5 +79,5 @@ export function timeAgo(d: Date, now: Date): string {
   const days = Math.floor(hours / 24)
   if (days === 1) return `Yesterday, ${clockLabel(d)}`
   if (days < 7) return `${days} days ago, ${clockLabel(d)}`
-  return `${shortDate(d)}, ${clockLabel(d)}`
+  return `${instantDate(d)}, ${clockLabel(d)}`
 }
