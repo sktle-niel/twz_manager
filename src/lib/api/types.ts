@@ -181,6 +181,28 @@ export type DailySales = {
   expected: number
 }
 
+/** One line of the item breakdown: a product sold, or a service performed */
+export type SoldItem = {
+  /** Loyverse's SKU; null on a line that carries none */
+  sku: string | null
+  name: string
+  /** Signed, so a refunded line subtracts itself from the range */
+  quantity: number
+  amount: number
+}
+
+/**
+ * What a branch sold over a range, split the way the ledger splits it:
+ * goods make net sales, services and labor never do. Both are money that
+ * crossed the counter — only `partsTotal` is the branch's to bank.
+ */
+export type ItemSales = {
+  parts: SoldItem[]
+  labor: SoldItem[]
+  partsTotal: number
+  laborTotal: number
+}
+
 export type DayStatus = "open" | "pending" | "matched" | "discrepancy"
 
 export type DayAudit = {

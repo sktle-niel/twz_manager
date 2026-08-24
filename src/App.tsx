@@ -13,6 +13,7 @@ import AccountPage from "./pages/AccountPage"
 import DepositsPage from "./pages/DepositsPage"
 import ExpensesPage from "./pages/ExpensesPage"
 import HistoryPage from "./pages/HistoryPage"
+import SalesPage from "./pages/SalesPage"
 import LoginPage from "./pages/LoginPage"
 import AdminHistoryPage from "./pages/AdminHistoryPage"
 import AdminManagersPage from "./pages/AdminManagersPage"
@@ -47,6 +48,7 @@ function App() {
           <Route element={<RequireManager />}>
             <Route element={<AppShell />}>
               <Route path="/" element={<DashboardPage />} />
+              <Route path="/sales" element={<SalesPage />} />
               <Route path="/expenses" element={<ExpensesPage />} />
               <Route path="/deposits" element={<DepositsPage />} />
               <Route path="/history" element={<HistoryPage />} />

@@ -720,6 +720,49 @@ export const sampleApi: TwzApi = {
     return settle([...managers])
   },
 
+  /*
+   * Fixed shares of the range's takings across recognisable lines. The
+   * sample exists to exercise the layout, so the split is stable rather
+   * than random — a page that reshuffles on every reload cannot be judged.
+   */
+  itemSales: (storeId, range) => {
+    const gross = eachDay(range).reduce((sum, day) => sum + grossFor(storeId, day), 0)
+
+    const shape = (rows: { sku: string; name: string; share: number; unit: number }[]) =>
+      rows.map((r) => {
+        const amount = Math.round(gross * r.share * 100) / 100
+        return {
+          sku: r.sku,
+          name: r.name,
+          quantity: Math.max(1, Math.round(amount / r.unit)),
+          amount,
+        }
+      })
+
+    const parts = shape([
+      { sku: "OF-HON", name: "Oil filter, Honda", share: 0.24, unit: 200 },
+      { sku: "BP-SET", name: "Brake pad set", share: 0.19, unit: 750 },
+      { sku: "CL-400", name: "Chain lube 400ml", share: 0.13, unit: 150 },
+      { sku: "SP-IRI", name: "Spark plug, iridium", share: 0.11, unit: 480 },
+      { sku: "TU-275", name: "Inner tube 2.75-17", share: 0.08, unit: 220 },
+    ])
+    const labor = shape([
+      { sku: "17137", name: "LABOR", share: 0.09, unit: 100 },
+      { sku: "10812", name: "WHEEL ALIGNMENT", share: 0.05, unit: 300 },
+      { sku: "11898", name: "BATTERY CHARGE", share: 0.02, unit: 150 },
+    ])
+
+    const total = (rows: { amount: number }[]) =>
+      Math.round(rows.reduce((sum, r) => sum + r.amount, 0) * 100) / 100
+
+    return settle({
+      parts,
+      labor,
+      partsTotal: total(parts),
+      laborTotal: total(labor),
+    })
+  },
+
   dailySales: (storeIds, range) => {
     const rows: DailySales[] = []
     for (const storeId of storeIds) {
