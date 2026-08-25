@@ -16,7 +16,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import { useMemo } from "react"
 import { compact, peso } from "../lib/format"
+import { paletteColor, useTheme } from "../lib/theme"
 
 export type SalesPoint = { label: string; amount: number }
 
@@ -38,10 +40,24 @@ function ChartTip({ active, label, payload }: TipProps) {
   )
 }
 
-const axisTick = { fill: "#6e6d66", fontSize: 11 }
-
-const BRAND = "#1e7d1b"
-const LINE = "#e9e8e4"
+/*
+ * Recharts paints SVG from props, not classes, so the palette is read back
+ * from the CSS variables — once per theme, since that is the only time the
+ * values change. Everything else in the chart is a token class already.
+ */
+function useChartColors() {
+  const { theme } = useTheme()
+  return useMemo(
+    () => ({
+      brand: paletteColor("brand-deep"),
+      line: paletteColor("line"),
+      mute: paletteColor("mute"),
+      surface: paletteColor("surface"),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [theme],
+  )
+}
 
 /*
  * Past this many readings the per-point marks and the vertical grid stop
@@ -52,6 +68,8 @@ const DENSE_AFTER = 31
 
 export function SalesChart({ data, ariaLabel }: { data: SalesPoint[]; ariaLabel: string }) {
   const dense = data.length > DENSE_AFTER
+  const { brand: BRAND, line: LINE, mute, surface } = useChartColors()
+  const axisTick = { fill: mute, fontSize: 11 }
 
   return (
     <div className="mt-5 h-56 sm:h-64 xl:h-[20rem] 2xl:h-[22rem]" role="img" aria-label={ariaLabel}>
@@ -89,8 +107,8 @@ export function SalesChart({ data, ariaLabel }: { data: SalesPoint[]; ariaLabel:
             strokeWidth={1.75}
             fill="url(#salesFill)"
             isAnimationActive={false}
-            dot={dense ? false : { r: 2.5, fill: BRAND, stroke: "#ffffff", strokeWidth: 1 }}
-            activeDot={{ r: 4.5, fill: "#ffffff", stroke: BRAND, strokeWidth: 2 }}
+            dot={dense ? false : { r: 2.5, fill: BRAND, stroke: surface, strokeWidth: 1 }}
+            activeDot={{ r: 4.5, fill: surface, stroke: BRAND, strokeWidth: 2 }}
           />
         </AreaChart>
       </ResponsiveContainer>

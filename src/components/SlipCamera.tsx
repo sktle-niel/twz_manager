@@ -173,7 +173,7 @@ export function SlipCamera({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-ink"
+      className="fixed inset-0 z-50 flex flex-col bg-night"
       role="dialog"
       aria-modal="true"
       aria-label={`Take a photo of the ${paper.short} ${paper.paper}`}
@@ -229,7 +229,7 @@ export function SlipCamera({
             <p
               role="status"
               className={`absolute inset-x-0 bottom-4 mx-auto w-fit rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-300 ease-quiet ${
-                guide.tone === "ok" ? "bg-brand text-ink" : "bg-ink/70 text-white"
+                guide.tone === "ok" ? "bg-brand text-night" : "bg-night/70 text-white"
               }`}
             >
               {guide.text}
@@ -253,7 +253,7 @@ export function SlipCamera({
           onClick={shoot}
           disabled={!live}
           aria-label="Take the photo"
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-ink ring-4 ring-white/25 transition-transform duration-200 ease-quiet active:scale-95 disabled:opacity-40"
+          className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-night ring-4 ring-white/25 transition-transform duration-200 ease-quiet active:scale-95 disabled:opacity-40"
         >
           <CameraIcon size={26} weight="fill" aria-hidden="true" />
         </button>

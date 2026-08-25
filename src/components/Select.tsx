@@ -255,7 +255,7 @@ export function Select({
                       isSelected
                         ? "bg-sage font-medium text-sage-ink"
                         : isActive
-                          ? "bg-black/[0.04] text-ink"
+                          ? "bg-ink/[0.04] text-ink"
                           : "text-ink-soft"
                     }`}
                   >

@@ -461,7 +461,7 @@ export default function ExpensesPage() {
             <button
               type="submit"
               disabled={saving || !category}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-line-strong text-[14.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03] disabled:pointer-events-none disabled:opacity-60"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-line-strong text-[14.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03] disabled:pointer-events-none disabled:opacity-60"
             >
               <PlusIcon size={16} weight="bold" aria-hidden="true" />
               Add another expense
@@ -505,7 +505,7 @@ export default function ExpensesPage() {
                         type="button"
                         onClick={() => setDraft((prev) => prev.filter((l) => l.id !== line.id))}
                         aria-label={`Remove ${line.note}`}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-mute transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-mute transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] hover:text-ink"
                       >
                         <XIcon size={14} weight="bold" aria-hidden="true" />
                       </button>
@@ -521,7 +521,7 @@ export default function ExpensesPage() {
               type="button"
               onClick={() => void handleSaveAll()}
               disabled={saving || queuedCount === 0}
-              className="flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
+              className="flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
             >
               {saveLabel}
               {!saving && !isToday && queuedCount > 0 && ` to ${shortDate(selectedDay)}`}
@@ -610,7 +610,7 @@ export default function ExpensesPage() {
                         type="button"
                         onClick={() => void removeAdvance(a)}
                         aria-label={`Remove the advance for ${a.employee}`}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-mute transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-mute transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] hover:text-ink"
                       >
                         <XIcon size={14} weight="bold" aria-hidden="true" />
                       </button>
@@ -669,7 +669,7 @@ export default function ExpensesPage() {
                 <button
                   type="submit"
                   disabled={savingAdvance}
-                  className="mt-2 flex w-full items-center justify-center rounded-lg border border-line-strong px-5 py-2.5 text-[16px] font-medium leading-[1.5] text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03] disabled:pointer-events-none disabled:opacity-60 sm:w-auto lg:text-[15px]"
+                  className="mt-2 flex w-full items-center justify-center rounded-lg border border-line-strong px-5 py-2.5 text-[16px] font-medium leading-[1.5] text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03] disabled:pointer-events-none disabled:opacity-60 sm:w-auto lg:text-[15px]"
                 >
                   {savingAdvance ? "Adding" : "Add"}
                 </button>
@@ -699,7 +699,7 @@ export default function ExpensesPage() {
                       onClick={() => setDayValue(dayKey(d))}
                       aria-current={active ? "true" : undefined}
                       className={`flex w-full items-center justify-between gap-3 px-5 py-2.5 text-left transition-colors duration-200 ease-quiet ${
-                        active ? "bg-sage" : "hover:bg-black/[0.03]"
+                        active ? "bg-sage" : "hover:bg-ink/[0.03]"
                       }`}
                     >
                       <span className="flex min-w-0 items-center gap-1.5">
@@ -755,7 +755,7 @@ export default function ExpensesPage() {
           drags the day's expected deposit negative */}
       {confirmBig !== null && (
         <div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-ink/25 p-4 sm:items-center"
+          className="fixed inset-0 z-40 flex items-end justify-center bg-scrim p-4 sm:items-center"
           role="alertdialog"
           aria-modal="true"
           aria-labelledby="big-expense-title"
@@ -792,7 +792,7 @@ export default function ExpensesPage() {
               <button
                 type="button"
                 onClick={() => setConfirmBig(null)}
-                className="flex h-11 items-center justify-center rounded-lg border border-line-strong px-5 text-[14px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+                className="flex h-11 items-center justify-center rounded-lg border border-line-strong px-5 text-[14px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03]"
               >
                 Go back and fix it
               </button>
@@ -803,7 +803,7 @@ export default function ExpensesPage() {
                   setConfirmBig(null)
                   void saveAll(lines)
                 }}
-                className="flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985]"
+                className="flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985]"
               >
                 The amount is right, save
               </button>

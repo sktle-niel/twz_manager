@@ -212,7 +212,7 @@ function RecoveryPinCard() {
             <button
               type="button"
               onClick={() => void keepAsImage()}
-              className="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+              className="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03]"
             >
               <DownloadSimpleIcon size={15} weight="bold" aria-hidden="true" />
               Save as image
@@ -220,7 +220,7 @@ function RecoveryPinCard() {
             <button
               type="button"
               onClick={keepAsPdf}
-              className="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+              className="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03]"
             >
               <DownloadSimpleIcon size={15} weight="bold" aria-hidden="true" />
               Save as PDF
@@ -233,7 +233,7 @@ function RecoveryPinCard() {
               setIssued(null)
               showToast("Recovery PIN changed.")
             }}
-            className="mt-4 flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
+            className="mt-4 flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
           >
             {kept ? "Done" : "Save a copy first"}
           </button>
@@ -311,7 +311,7 @@ function RecoveryPinCard() {
             <button
               type="submit"
               disabled={saving}
-              className="flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
+              className="flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
             >
               {saving ? "Changing" : "Change PIN"}
             </button>
@@ -562,7 +562,7 @@ export default function AdminSettingsPage() {
                   )
                 })
             }}
-            className="flex h-10 items-center justify-center rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+            className="flex h-10 items-center justify-center rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03]"
           >
             Reconnect
           </button>
@@ -613,14 +613,14 @@ export default function AdminSettingsPage() {
                     <button
                       type="button"
                       onClick={() => saveEdit(c)}
-                      className="flex h-10 items-center justify-center rounded-lg bg-ink px-4 text-[13.5px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985]"
+                      className="flex h-10 items-center justify-center rounded-lg bg-ink px-4 text-[13.5px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985]"
                     >
                       Save
                     </button>
                     <button
                       type="button"
                       onClick={cancelEdit}
-                      className="flex h-10 items-center justify-center rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+                      className="flex h-10 items-center justify-center rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03]"
                     >
                       Cancel
                     </button>
@@ -676,7 +676,7 @@ export default function AdminSettingsPage() {
             />
             <button
               type="submit"
-              className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-line-strong px-4 text-[14px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+              className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-line-strong px-4 text-[14px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03]"
             >
               <PlusIcon size={15} weight="bold" aria-hidden="true" />
               Add
@@ -732,7 +732,7 @@ export default function AdminSettingsPage() {
             />
             <button
               type="submit"
-              className="flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985]"
+              className="flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985]"
             >
               Save
             </button>

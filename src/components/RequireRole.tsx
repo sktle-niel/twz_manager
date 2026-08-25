@@ -36,7 +36,7 @@ export function RequireManager() {
         <button
           type="button"
           onClick={() => void auth.signOut()}
-          className="flex h-11 items-center justify-center rounded-lg border border-line-strong px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+          className="flex h-11 items-center justify-center rounded-lg border border-line-strong px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03]"
         >
           Sign out
         </button>

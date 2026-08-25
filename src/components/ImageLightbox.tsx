@@ -105,7 +105,7 @@ export function ImageLightbox({
       role="dialog"
       aria-modal="true"
       aria-label={alt}
-      className="fixed inset-0 z-[60] bg-ink/90"
+      className="fixed inset-0 z-[60] bg-night/90"
       onKeyDown={(e) => {
         if (e.key === "Escape") onClose()
       }}
@@ -135,7 +135,7 @@ export function ImageLightbox({
       </div>
 
       {/* The controls float above the frame, out of the gesture's way */}
-      <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-ink/70 p-1.5 backdrop-blur-sm">
+      <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-night/70 p-1.5 backdrop-blur-sm">
         <button
           type="button"
           onClick={() => zoomCentered(1 / 1.4)}

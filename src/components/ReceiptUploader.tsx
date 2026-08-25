@@ -34,7 +34,7 @@ function Thumb({ entry, onRemove }: { entry: ReceiptEntry; onRemove: () => void 
         type="button"
         onClick={onRemove}
         aria-label="Remove receipt"
-        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-ink/70 text-white transition-colors duration-200 ease-quiet hover:bg-ink"
+        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-night/70 text-white transition-colors duration-200 ease-quiet hover:bg-night"
       >
         <XIcon size={12} weight="bold" aria-hidden="true" />
       </button>

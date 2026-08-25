@@ -108,7 +108,7 @@ export function ExpenseDialog({
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-ink/25"
+        className="absolute inset-0 cursor-default bg-scrim"
       />
 
       <div
@@ -124,7 +124,7 @@ export function ExpenseDialog({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="-mr-2 -mt-1 flex h-9 w-9 items-center justify-center rounded-lg text-mute transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
+            className="-mr-2 -mt-1 flex h-9 w-9 items-center justify-center rounded-lg text-mute transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] hover:text-ink"
           >
             <XIcon size={16} weight="bold" aria-hidden="true" />
           </button>
@@ -194,13 +194,13 @@ export function ExpenseDialog({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-11 items-center justify-center rounded-lg px-4 text-[14.5px] font-medium text-ink-soft transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
+              className="flex h-11 items-center justify-center rounded-lg px-4 text-[14.5px] font-medium text-ink-soft transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] hover:text-ink"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985]"
+              className="flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985]"
             >
               Save changes
             </button>

@@ -5,6 +5,8 @@ import "@fontsource-variable/geist-mono"
 import "@fontsource-variable/newsreader/opsz.css"
 import "@fontsource-variable/newsreader/opsz-italic.css"
 import "./index.css"
+/* Applies the stored or device theme to <html> before anything renders */
+import "./lib/theme"
 import App from "./App.tsx"
 
 createRoot(document.getElementById("root")!).render(

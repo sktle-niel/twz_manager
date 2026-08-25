@@ -214,7 +214,7 @@ export function PhotoAttach({
           <button
             type="button"
             onClick={onCapture}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-lg border px-3.5 py-3 text-[14px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03] ${
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg border px-3.5 py-3 text-[14px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03] ${
               error ? "border-claret/60" : "border-line-strong"
             }`}
           >

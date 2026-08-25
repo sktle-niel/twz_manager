@@ -60,7 +60,7 @@ export function StatusChip({ status }: { status: PaintedStatus }) {
       )
     case "pending":
       return (
-        <span className="inline-flex items-center rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium text-ink-soft">
+        <span className="inline-flex items-center rounded-full bg-ink/[0.05] px-2 py-0.5 text-[11px] font-medium text-ink-soft">
           Pending deposit
         </span>
       )

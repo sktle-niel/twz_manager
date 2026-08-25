@@ -140,7 +140,7 @@ export function ReceiptDialog({
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-ink/25"
+        className="absolute inset-0 cursor-default bg-scrim"
       />
 
       <div
@@ -160,7 +160,7 @@ export function ReceiptDialog({
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="-mr-2 flex h-9 w-9 items-center justify-center rounded-lg text-mute transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
+              className="-mr-2 flex h-9 w-9 items-center justify-center rounded-lg text-mute transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] hover:text-ink"
             >
               <XIcon size={16} weight="bold" aria-hidden="true" />
             </button>
@@ -182,7 +182,7 @@ export function ReceiptDialog({
                 alt={`Deposit slip for ${rowDate(date)}, ${branchName}`}
                 className="max-h-[50dvh] w-full rounded-lg border border-line bg-canvas object-contain"
               />
-              <span className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-ink/70 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm">
+              <span className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-night/70 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm">
                 <MagnifyingGlassPlusIcon size={12} weight="bold" aria-hidden="true" />
                 Tap to zoom
               </span>

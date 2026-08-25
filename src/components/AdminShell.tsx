@@ -10,7 +10,8 @@ import {
   UsersThreeIcon,
 } from "@phosphor-icons/react"
 import type { Icon } from "@phosphor-icons/react"
-import logo from "../assets/twz-logo-light.png"
+import { Logo } from "./Logo"
+import { ThemeToggle } from "./ThemeToggle"
 import crew from "../assets/twz-crew.webp"
 import { stockAvatar } from "../lib/avatar"
 import { useRouteReveal } from "../lib/motion"
@@ -52,11 +53,20 @@ export default function AdminShell() {
           on opaque surfaces, so the art only shows in the breathing room and
           never under a figure someone has to read. */}
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10">
+        {/* Dark mode only (--crew-glow): a pool of light behind the figures, so
+           their black outlines and tyres do not sink into the canvas */}
+        <div
+          className="absolute -bottom-[10vh] -right-[10vw] h-[60vh] w-[70vw] opacity-[var(--crew-glow)] lg:h-[min(80vh,720px)] lg:w-[46vw]"
+          style={{
+            background:
+              "radial-gradient(ellipse at 62% 68%, color-mix(in oklab, var(--color-ink) 11%, transparent), transparent 68%)",
+          }}
+        />
         <img
           src={crew}
           alt=""
           draggable={false}
-          className="absolute bottom-0 right-0 h-[40vh] w-auto opacity-[0.06] select-none lg:h-[min(62vh,560px)]"
+          className="absolute bottom-0 right-0 h-[40vh] w-auto opacity-[var(--crew-shell)] select-none lg:h-[min(62vh,560px)]"
         />
       </div>
 
@@ -65,7 +75,7 @@ export default function AdminShell() {
         <div className="flex h-full flex-col p-4">
           <div className="flex items-center gap-2 px-2 pt-1">
             <Link to="/admin" className="inline-flex">
-              <img src={logo} alt="Two Wheels Zone" className="h-8 w-auto select-none" draggable={false} />
+              <Logo className="h-8 w-auto select-none" />
             </Link>
             <span className="rounded-full bg-sage px-2 py-0.5 text-[10.5px] font-medium text-sage-ink">
               Owner
@@ -81,7 +91,7 @@ export default function AdminShell() {
                   `flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-colors duration-200 ease-quiet ${
                     isActive
                       ? "bg-sage text-sage-ink"
-                      : "text-ink-soft hover:bg-black/[0.04] hover:text-ink"
+                      : "text-ink-soft hover:bg-ink/[0.04] hover:text-ink"
                   }`
                 }
               >
@@ -98,7 +108,7 @@ export default function AdminShell() {
             {/* Whose session this is, wherever in the app they are */}
             <Link
               to="/admin/account"
-              className="flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors duration-200 ease-quiet hover:bg-black/[0.04]"
+              className="flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors duration-200 ease-quiet hover:bg-ink/[0.04]"
             >
               <img
                 src={avatar}
@@ -113,10 +123,11 @@ export default function AdminShell() {
                 <span className="block truncate text-[11.5px] text-mute">Owner</span>
               </span>
             </Link>
+            <ThemeToggle variant="row" />
             <button
               type="button"
               onClick={() => void handleSignOut()}
-              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium text-ink-soft transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium text-ink-soft transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] hover:text-ink"
             >
               <SignOutIcon size={18} aria-hidden="true" />
               <span>Sign out</span>
@@ -127,9 +138,9 @@ export default function AdminShell() {
 
       {/* Mobile top bar: centered logo, the account's own face on the right */}
       <header className="grid h-14 grid-cols-[44px_1fr_44px] items-center border-b border-line bg-canvas px-2 lg:hidden">
-        <span aria-hidden="true" />
+        <ThemeToggle />
         <Link to="/admin" className="inline-flex items-center justify-self-center">
-          <img src={logo} alt="Two Wheels Zone" className="h-7 w-auto select-none" draggable={false} />
+          <Logo className="h-7 w-auto select-none" />
         </Link>
         <NavLink
           to="/admin/account"

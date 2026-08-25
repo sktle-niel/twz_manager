@@ -19,7 +19,7 @@ function pageItems(page: number, totalPages: number): (number | "gap")[] {
 }
 
 const navButton =
-  "flex h-8 w-8 items-center justify-center rounded-lg text-mute transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink disabled:pointer-events-none disabled:opacity-30"
+  "flex h-8 w-8 items-center justify-center rounded-lg text-mute transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] hover:text-ink disabled:pointer-events-none disabled:opacity-30"
 
 export function Pagination({
   page,
@@ -81,7 +81,7 @@ export function Pagination({
                 className={`flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-[13px] tabular-nums transition-colors duration-200 ease-quiet ${
                   item === page
                     ? "bg-sage font-semibold text-sage-ink"
-                    : "text-ink-soft hover:bg-black/[0.04] hover:text-ink"
+                    : "text-ink-soft hover:bg-ink/[0.04] hover:text-ink"
                 }`}
               >
                 {item}

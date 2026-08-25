@@ -15,7 +15,7 @@ import {
   EyeSlashIcon,
   ReceiptIcon,
 } from "@phosphor-icons/react"
-import logo from "../assets/twz-logo-light.png"
+import { Logo } from "../components/Logo"
 import crew from "../assets/twz-crew.webp"
 
 type FieldErrors = { identifier?: string; password?: string; form?: string }
@@ -115,11 +115,20 @@ export default function LoginPage() {
           surface is opaque, so the art frames the form without touching its
           legibility; the fixed layer sits under the canvas-level content. */}
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 lg:hidden">
+        {/* Dark mode only (--crew-glow): light behind the figures so their
+            black outlines do not sink into the canvas */}
+        <div
+          className="absolute -bottom-[8vh] left-1/2 h-[64vh] w-[120vw] -translate-x-1/2 opacity-[var(--crew-glow)]"
+          style={{
+            background:
+              "radial-gradient(ellipse at 50% 70%, color-mix(in oklab, var(--color-ink) 11%, transparent), transparent 66%)",
+          }}
+        />
         <img
           src={crew}
           alt=""
           draggable={false}
-          className="absolute bottom-0 left-1/2 h-[52vh] w-auto -translate-x-1/2 opacity-[0.09] select-none"
+          className="absolute bottom-0 left-1/2 h-[52vh] w-auto -translate-x-1/2 opacity-[var(--crew-login)] select-none"
         />
       </div>
 
@@ -136,7 +145,8 @@ export default function LoginPage() {
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 hidden opacity-[0.25] lg:block"
           style={{
-            backgroundImage: "radial-gradient(rgba(21,22,19,0.08) 1px, transparent 1px)",
+            backgroundImage:
+              "radial-gradient(color-mix(in oklab, var(--color-ink) 8%, transparent) 1px, transparent 1px)",
             backgroundSize: "24px 24px",
           }}
         />
@@ -156,6 +166,15 @@ export default function LoginPage() {
           on the panel; the art glows through behind them.
         */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden lg:block">
+          {/* Dark mode only (--crew-glow): light behind the figures so their
+              black outlines do not sink into the canvas */}
+          <div
+            className="absolute -bottom-[10vh] -right-[6vw] h-[100vh] w-[60vw] opacity-[var(--crew-glow)]"
+            style={{
+              background:
+                "radial-gradient(ellipse at 64% 66%, color-mix(in oklab, var(--color-ink) 12%, transparent), transparent 68%)",
+            }}
+          />
           <img
             src={crew}
             alt=""
@@ -169,12 +188,7 @@ export default function LoginPage() {
           className="relative flex justify-center pt-10 lg:justify-start lg:pt-0"
           data-rise="brand"
         >
-          <img
-            src={logo}
-            alt="Two Wheels Zone"
-            className="h-12 w-auto select-none sm:h-14"
-            draggable={false}
-          />
+          <Logo className="h-12 w-auto select-none sm:h-14" />
         </header>
 
         <div className="relative hidden max-w-lg lg:block">
@@ -320,7 +334,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-ink text-[15px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-60"
+                className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-ink text-[15px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985] disabled:pointer-events-none disabled:opacity-60"
               >
                 {submitting && (
                   <CircleNotchIcon size={16} weight="bold" className="animate-spin" aria-hidden="true" />

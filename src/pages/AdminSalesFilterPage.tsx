@@ -153,7 +153,7 @@ export default function AdminSalesFilterPage() {
                       <button
                         type="button"
                         onClick={() => add(item)}
-                        className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-line-strong px-3 text-[13px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+                        className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-line-strong px-3 text-[13px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03]"
                       >
                         <PlusIcon size={13} weight="bold" aria-hidden="true" />
                         Add
@@ -215,7 +215,7 @@ export default function AdminSalesFilterPage() {
                     type="button"
                     onClick={() => remove(item)}
                     aria-label={`Count ${item.name || item.sku} toward sales again`}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-mute transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-mute transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] hover:text-ink"
                   >
                     <XIcon size={14} weight="bold" aria-hidden="true" />
                   </button>
@@ -229,7 +229,7 @@ export default function AdminSalesFilterPage() {
               type="button"
               onClick={() => void save()}
               disabled={!dirty || saving}
-              className="flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
+              className="flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
             >
               {saving ? "Saving" : "Save changes"}
             </button>

@@ -49,7 +49,7 @@ export function InstallCard() {
           type="button"
           disabled={busy}
           onClick={() => void handleInstall()}
-          className="mt-4 flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-white transition-colors duration-200 ease-quiet hover:bg-[#2e2f2b] disabled:pointer-events-none disabled:opacity-60"
+          className="mt-4 flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-canvas transition-colors duration-200 ease-quiet hover:bg-ink-hover disabled:pointer-events-none disabled:opacity-60"
         >
           Install to this device
         </button>
