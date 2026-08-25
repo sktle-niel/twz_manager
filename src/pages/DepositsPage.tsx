@@ -338,12 +338,11 @@ export default function DepositsPage() {
     if (!slip) next.slip = `The ${bankInfo.short} ${bankInfo.paper} photo is required.`
     /* The checks are the gate now, so recording waits for them to finish */
     else if (checking) next.slip = "Still checking the photo. Give it a moment."
-    /* Only the near-objective findings block — a file that will not decode, an
-       image too small to read, a photo already filed against another deposit,
-       a page with none of the bank's wording on it or plainly the other
-       bank's form. The heuristics warn and go through: being locked out of
-       filing a deposit over a wrong focus reading is worse than a slip the
-       owner asks again for. */
+    /* Only the near-objective findings block — a file that will not decode, a
+       photo already filed against another deposit, a page with none of the
+       bank's wording on it or plainly the other bank's form. The heuristics
+       warn and go through: being locked out of filing a deposit over a wrong
+       focus reading is worse than a slip the owner asks again for. */
     else if (slipReport?.level === "fail") next.slip = slipReport.headline
 
     if (mismatchCents !== 0 && reason.trim().length < REASON_MIN) {
