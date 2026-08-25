@@ -99,7 +99,7 @@ export function ChangePasswordCard() {
           <button
             type="submit"
             disabled={saving}
-            className="flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-60"
+            className="flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985] disabled:pointer-events-none disabled:opacity-60"
           >
             {saving ? "Updating" : "Update password"}
           </button>

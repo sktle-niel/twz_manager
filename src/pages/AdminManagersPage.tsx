@@ -86,7 +86,7 @@ function ManagerRow({
                 ? "Disable this account"
                 : "Re-enable this account"
           }
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ease-quiet hover:bg-black/[0.04] disabled:pointer-events-none disabled:opacity-40 ${
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] disabled:pointer-events-none disabled:opacity-40 ${
             manager.active ? "text-mute hover:text-claret" : "text-claret"
           }`}
         >
@@ -98,7 +98,7 @@ function ManagerRow({
           aria-pressed={resetting}
           aria-label={`Set a new password for ${manager.name}`}
           title="Set a new password"
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ease-quiet hover:bg-black/[0.04] ${
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] ${
             resetting ? "text-brand-deep" : "text-mute hover:text-ink"
           }`}
         >
@@ -112,7 +112,7 @@ function ManagerRow({
             locked ? `Unlock branch for ${manager.name}` : `Lock branch for ${manager.name}`
           }
           title={locked ? "Locked. Click to allow changes" : "Unlocked. Click to lock"}
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ease-quiet hover:bg-black/[0.04] ${
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] ${
             locked ? "text-mute hover:text-ink" : "text-brand-deep"
           }`}
         >
@@ -226,7 +226,7 @@ function ResetPanel({
       <button
         type="submit"
         disabled={saving}
-        className="mt-3 flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
+        className="mt-3 flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14.5px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
       >
         {saving ? "Setting" : "Set password"}
       </button>
@@ -500,7 +500,7 @@ export default function AdminManagersPage() {
               <button
                 type="submit"
                 disabled={saving || freeStores.length === 0}
-                className="flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
+                className="flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
               >
                 {saving ? "Issuing" : "Issue account"}
               </button>

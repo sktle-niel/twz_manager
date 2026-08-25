@@ -52,7 +52,7 @@ choice in the UI.
 | `/expenses` | Batch expense entry, back-dating to any day still awaiting a deposit, per-row edit and delete |
 | `/deposits` | Every audited day not yet covered, live match check, deposit slip upload checked against the branch's bank |
 | `/history` | Day-by-day audit table with status and the deposit receipt |
-| `/account` | Profile, password, sign out, and the sign-in log (device, IP, when) |
+| `/account` | Profile, password, light/dark appearance, sign out, and the sign-in log (device, IP, when) |
 
 **Owner** — spans every branch, under `/admin`.
 
@@ -62,7 +62,7 @@ choice in the UI.
 | `/admin/history` | The same audit table with a branch column |
 | `/admin/managers` | Issue and reassign branch-manager accounts (one branch each) |
 | `/admin/settings` | Branches and the bank each deposits to (BDO or BPI), POS connection, expense categories, reconciliation rules |
-| `/admin/account` | Owner profile, password, sign out, and the sign-in log |
+| `/admin/account` | Owner profile, password, light/dark appearance, sign out, and the sign-in log |
 
 ## Running it
 

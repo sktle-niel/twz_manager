@@ -99,8 +99,8 @@ export function NotificationsCard() {
           onClick={() => void (state === "on" ? turnOff() : turnOn())}
           className={`mt-4 flex h-11 items-center justify-center rounded-lg px-5 text-[14.5px] font-medium transition-colors duration-200 ease-quiet disabled:pointer-events-none disabled:opacity-60 ${
             state === "on"
-              ? "border border-line-strong text-ink hover:bg-black/[0.03]"
-              : "bg-ink text-white hover:bg-[#2e2f2b]"
+              ? "border border-line-strong text-ink hover:bg-ink/[0.03]"
+              : "bg-ink text-canvas hover:bg-ink-hover"
           }`}
         >
           {state === "on" ? "Turn off on this device" : "Turn on reminders"}

@@ -88,7 +88,7 @@ export function InstallBanner() {
             <button
               type="button"
               onClick={() => void handleInstall()}
-              className="mt-2.5 flex h-9 items-center justify-center rounded-lg bg-ink px-4 text-[13.5px] font-medium text-white transition-colors duration-200 ease-quiet hover:bg-[#2e2f2b]"
+              className="mt-2.5 flex h-9 items-center justify-center rounded-lg bg-ink px-4 text-[13.5px] font-medium text-canvas transition-colors duration-200 ease-quiet hover:bg-ink-hover"
             >
               Install to this device
             </button>
@@ -98,7 +98,7 @@ export function InstallBanner() {
           type="button"
           onClick={dismiss}
           aria-label="Dismiss"
-          className="shrink-0 rounded-md p-1 text-mute transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
+          className="shrink-0 rounded-md p-1 text-mute transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] hover:text-ink"
         >
           <XIcon size={15} aria-hidden="true" />
         </button>

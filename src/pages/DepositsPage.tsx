@@ -938,7 +938,7 @@ export default function DepositsPage() {
             <button
               type="submit"
               disabled={saving || checking}
-              className="flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-60"
+              className="flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985] disabled:pointer-events-none disabled:opacity-60"
             >
               {saving ? "Recording" : checking ? `Checking the ${bankInfo.paper}` : "Record deposit"}
             </button>
@@ -1013,7 +1013,7 @@ export default function DepositsPage() {
           longer be edited */}
       {confirmBareDays !== null && (
         <div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-ink/25 p-4 sm:items-center"
+          className="fixed inset-0 z-40 flex items-end justify-center bg-scrim p-4 sm:items-center"
           role="alertdialog"
           aria-modal="true"
           aria-labelledby="bare-days-title"
@@ -1045,7 +1045,7 @@ export default function DepositsPage() {
               <button
                 type="button"
                 onClick={() => setConfirmBareDays(null)}
-                className="flex h-11 items-center justify-center rounded-lg border border-line-strong px-5 text-[14px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+                className="flex h-11 items-center justify-center rounded-lg border border-line-strong px-5 text-[14px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03]"
               >
                 Go back and log expenses
               </button>
@@ -1055,7 +1055,7 @@ export default function DepositsPage() {
                   setConfirmBareDays(null)
                   void submitDeposit()
                 }}
-                className="flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985]"
+                className="flex h-11 items-center justify-center rounded-lg bg-ink px-5 text-[14px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985]"
               >
                 No expenses, record it
               </button>

@@ -196,7 +196,7 @@ export function DateRangePicker({
               type="button"
               aria-label="Close"
               onClick={() => setOpen(false)}
-              className="fixed inset-0 z-40 cursor-default bg-ink/25 sm:bg-ink/10"
+              className="fixed inset-0 z-40 cursor-default bg-scrim sm:bg-scrim-soft"
             />
             <div
               ref={panelRef}
@@ -216,7 +216,7 @@ export function DateRangePicker({
                         setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))
                       }
                       aria-label="Previous month"
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-mute transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-mute transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] hover:text-ink"
                     >
                       <CaretLeftIcon size={15} weight="bold" aria-hidden="true" />
                     </button>
@@ -230,7 +230,7 @@ export function DateRangePicker({
                         setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))
                       }
                       aria-label="Next month"
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-mute transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink disabled:pointer-events-none disabled:opacity-30"
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-mute transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] hover:text-ink disabled:pointer-events-none disabled:opacity-30"
                     >
                       <CaretRightIcon size={15} weight="bold" aria-hidden="true" />
                     </button>
@@ -259,13 +259,13 @@ export function DateRangePicker({
 
                       let dayClass: string
                       if (isStart || isEnd) {
-                        dayClass = "bg-brand-deep font-semibold text-white"
+                        dayClass = "bg-brand-deep font-semibold text-canvas"
                       } else if (disabled) {
                         dayClass = "cursor-not-allowed text-mute/40"
                       } else if (outside) {
-                        dayClass = "text-mute hover:bg-black/[0.06]"
+                        dayClass = "text-mute hover:bg-ink/[0.06]"
                       } else {
-                        dayClass = "text-ink-soft hover:bg-black/[0.06]"
+                        dayClass = "text-ink-soft hover:bg-ink/[0.06]"
                       }
 
                       return (
@@ -342,7 +342,7 @@ export function DateRangePicker({
                         className={`rounded-lg px-3 py-2 text-left text-[13.5px] transition-colors duration-200 ease-quiet ${
                           activePreset === p.key
                             ? "bg-sage font-medium text-sage-ink"
-                            : "text-ink-soft hover:bg-black/[0.04] hover:text-ink"
+                            : "text-ink-soft hover:bg-ink/[0.04] hover:text-ink"
                         }`}
                       >
                         {p.label}
@@ -357,14 +357,14 @@ export function DateRangePicker({
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="flex h-10 items-center justify-center rounded-lg px-4 text-[14px] font-medium text-ink-soft transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
+                  className="flex h-10 items-center justify-center rounded-lg px-4 text-[14px] font-medium text-ink-soft transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] hover:text-ink"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={commit}
-                  className="flex h-10 items-center justify-center rounded-lg bg-ink px-5 text-[14px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985]"
+                  className="flex h-10 items-center justify-center rounded-lg bg-ink px-5 text-[14px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985]"
                 >
                   Done
                 </button>

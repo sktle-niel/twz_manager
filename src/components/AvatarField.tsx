@@ -74,7 +74,7 @@ export function AvatarField({
   )
 
   const actionClass =
-    "flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-line-strong px-3 text-[13px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+    "flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-line-strong px-3 text-[13px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03]"
 
   return (
     <div className="flex items-center gap-4">

@@ -3,6 +3,7 @@ import type { SubmitEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { SignOutIcon } from "@phosphor-icons/react"
 import { FormField, inputBad, inputBase, inputOk } from "../components/ui"
+import { AppearanceCard } from "../components/AppearanceCard"
 import { ChangePasswordCard } from "../components/ChangePasswordCard"
 import { InstallCard } from "../components/InstallCard"
 import { AvatarField } from "../components/AvatarField"
@@ -65,7 +66,7 @@ export default function AdminAccountPage() {
   }
 
   const submitClass =
-    "flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-60"
+    "flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985] disabled:pointer-events-none disabled:opacity-60"
 
   return (
     <>
@@ -141,12 +142,15 @@ export default function AdminAccountPage() {
 
         <ChangePasswordCard />
 
+        {/* Light or dark, per device */}
+        <AppearanceCard />
+
         {/* Renders only in a browser tab — inside the installed app it's moot */}
         <InstallCard />
 
         {/* Session */}
         <section
-          className="rounded-xl border border-line bg-surface p-5 sm:p-6"
+          className="xl:col-start-1 rounded-xl border border-line bg-surface p-5 sm:p-6"
           data-rise
         >
         <h2 className="text-[15px] font-semibold text-ink">Session</h2>
@@ -157,14 +161,16 @@ export default function AdminAccountPage() {
         <button
           type="button"
           onClick={() => void handleSignOut()}
-          className="mt-4 flex h-11 items-center justify-center gap-2 rounded-lg border border-line-strong px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+          className="mt-4 flex h-11 items-center justify-center gap-2 rounded-lg border border-line-strong px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03]"
         >
           <SignOutIcon size={17} aria-hidden="true" />
           Sign out
         </button>
         </section>
 
-        {/* Pairs with Session on the second row of the 2×2 grid */}
+        {/* Always beside Session: the col-start above pins Session to a fresh
+            row whatever the card count ahead of it (Install renders only in a
+            browser tab), so these two never split across rows */}
         <SignInCard events={signIns.data ?? []} now={now} loading={signIns.loading} />
       </div>
     </>

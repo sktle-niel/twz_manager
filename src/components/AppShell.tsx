@@ -11,7 +11,8 @@ import {
   UserCircleIcon,
 } from "@phosphor-icons/react"
 import type { Icon } from "@phosphor-icons/react"
-import logo from "../assets/twz-logo-light.png"
+import { Logo } from "./Logo"
+import { ThemeToggle } from "./ThemeToggle"
 import crew from "../assets/twz-crew.webp"
 import { stockAvatar } from "../lib/avatar"
 import { useRouteReveal, useSheetEnter } from "../lib/motion"
@@ -66,7 +67,7 @@ function NewEntrySheet({ open, onClose }: { open: boolean; onClose: () => void }
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 bg-ink/25"
+        className="absolute inset-0 bg-scrim"
       />
       <div
         ref={panelRef}
@@ -79,7 +80,7 @@ function NewEntrySheet({ open, onClose }: { open: boolean; onClose: () => void }
             type="button"
             autoFocus
             onClick={() => go("/expenses")}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors duration-200 ease-quiet hover:bg-black/[0.04]"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors duration-200 ease-quiet hover:bg-ink/[0.04]"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-sage text-sage-ink">
               <ReceiptIcon size={19} weight="bold" aria-hidden="true" />
@@ -92,7 +93,7 @@ function NewEntrySheet({ open, onClose }: { open: boolean; onClose: () => void }
           <button
             type="button"
             onClick={() => go("/deposits")}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors duration-200 ease-quiet hover:bg-black/[0.04]"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors duration-200 ease-quiet hover:bg-ink/[0.04]"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-sage text-sage-ink">
               <BankIcon size={19} weight="bold" aria-hidden="true" />
@@ -142,11 +143,20 @@ export default function AppShell() {
           on opaque surfaces, so the art only shows in the breathing room and
           never under a figure someone has to read. */}
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10">
+        {/* Dark mode only (--crew-glow): a pool of light behind the figures, so
+           their black outlines and tyres do not sink into the canvas */}
+        <div
+          className="absolute -bottom-[10vh] -right-[10vw] h-[60vh] w-[70vw] opacity-[var(--crew-glow)] lg:h-[min(80vh,720px)] lg:w-[46vw]"
+          style={{
+            background:
+              "radial-gradient(ellipse at 62% 68%, color-mix(in oklab, var(--color-ink) 11%, transparent), transparent 68%)",
+          }}
+        />
         <img
           src={crew}
           alt=""
           draggable={false}
-          className="absolute bottom-0 right-0 h-[40vh] w-auto opacity-[0.06] select-none lg:h-[min(62vh,560px)]"
+          className="absolute bottom-0 right-0 h-[40vh] w-auto opacity-[var(--crew-shell)] select-none lg:h-[min(62vh,560px)]"
         />
       </div>
 
@@ -155,7 +165,7 @@ export default function AppShell() {
         <div className="flex h-full flex-col p-4">
           <div className="flex items-center px-2 pt-1">
             <Link to="/" className="inline-flex">
-              <img src={logo} alt="Two Wheels Zone" className="h-8 w-auto select-none" draggable={false} />
+              <Logo className="h-8 w-auto select-none" />
             </Link>
           </div>
           <nav aria-label="Primary" className="mt-8 space-y-1">
@@ -168,7 +178,7 @@ export default function AppShell() {
                   `flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-colors duration-200 ease-quiet ${
                     isActive
                       ? "bg-sage text-sage-ink"
-                      : "text-ink-soft hover:bg-black/[0.04] hover:text-ink"
+                      : "text-ink-soft hover:bg-ink/[0.04] hover:text-ink"
                   }`
                 }
               >
@@ -185,7 +195,7 @@ export default function AppShell() {
             {/* Whose session this is, wherever in the app they are */}
             <Link
               to="/account"
-              className="flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors duration-200 ease-quiet hover:bg-black/[0.04]"
+              className="flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors duration-200 ease-quiet hover:bg-ink/[0.04]"
             >
               <img
                 src={avatar}
@@ -200,10 +210,11 @@ export default function AppShell() {
                 <span className="block truncate text-[11.5px] text-mute">{store.name} branch</span>
               </span>
             </Link>
+            <ThemeToggle variant="row" />
             <button
               type="button"
               onClick={() => void handleSignOut()}
-              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium text-ink-soft transition-colors duration-200 ease-quiet hover:bg-black/[0.04] hover:text-ink"
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium text-ink-soft transition-colors duration-200 ease-quiet hover:bg-ink/[0.04] hover:text-ink"
             >
               <SignOutIcon size={18} aria-hidden="true" />
               <span>Sign out</span>
@@ -214,9 +225,9 @@ export default function AppShell() {
 
       {/* Mobile top bar: centered logo, the account's own face on the right */}
       <header className="grid h-14 grid-cols-[44px_1fr_44px] items-center border-b border-line bg-canvas px-2 lg:hidden">
-        <span aria-hidden="true" />
+        <ThemeToggle />
         <Link to="/" className="inline-flex items-center justify-self-center">
-          <img src={logo} alt="Two Wheels Zone" className="h-7 w-auto select-none" draggable={false} />
+          <Logo className="h-7 w-auto select-none" />
         </Link>
         <NavLink
           to="/account"
@@ -258,7 +269,7 @@ export default function AppShell() {
               onClick={() => setSheetOpen(true)}
               aria-label="New entry"
               aria-haspopup="dialog"
-              className="absolute left-1/2 top-0 flex h-14 w-14 -translate-x-1/2 -translate-y-5 items-center justify-center rounded-full bg-ink text-white shadow-[0_2px_10px_rgba(21,22,19,0.14)] ring-4 ring-canvas transition-transform duration-200 ease-quiet active:scale-95"
+              className="absolute left-1/2 top-0 flex h-14 w-14 -translate-x-1/2 -translate-y-5 items-center justify-center rounded-full bg-ink text-canvas shadow-[0_2px_10px_rgba(21,22,19,0.14)] ring-4 ring-canvas transition-transform duration-200 ease-quiet active:scale-95"
             >
               <PlusIcon size={26} weight="bold" aria-hidden="true" />
             </button>

@@ -13,6 +13,17 @@
   --color-sage: #edf3ec;
   --color-sage-ink: #346538;
   --color-claret: #b3392f;
+  /* The solid ink button's hover shade */
+  --color-ink-hover: #2e2f2b;
+  /* Always dark, whatever the theme: the camera, the lightbox, and the
+     badges laid over photos. */
+  --color-night: #151613;
+  /* The scrim behind a sheet or dialog. Dark in both themes — one that
+     turned light in dark mode would haze the page rather than dim it — but
+     heavier there, because near-black at 25% over a near-black page is no
+     dimming at all. `soft` is the desktop popover's lighter veil. */
+  --color-scrim: rgba(21, 22, 19, 0.25);
+  --color-scrim-soft: rgba(21, 22, 19, 0.1);
 
   --font-sans: "Geist Variable", "Geist", system-ui, "Helvetica Neue", sans-serif;
   --font-serif: "Newsreader Variable", "Newsreader", Charter, Georgia, serif;
@@ -21,8 +32,48 @@
   --ease-quiet: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/*
+ * Light is the palette above; dark redefines the same tokens, so every
+ * utility that reads a token flips with it. `<html data-theme>` is set by
+ * src/lib/theme.ts (and by public/theme-boot.js before the first paint). Nothing is
+ * keyed on prefers-color-scheme directly — "follow the device" is resolved
+ * in one place and written here as light or dark.
+ *
+ * The crew art behind every page keeps its own opacity per theme: a cartoon
+ * at 6% over near-black is a smudge, so the dark values sit higher and the
+ * figures stay visible, which is the point of having them there at all. Two
+ * things in the drawing are near-black — the outlines and the tyres — and
+ * no opacity brings those back against a #131412 canvas, so in dark mode a
+ * soft pool of light (`--crew-glow`) sits behind the figures and gives the
+ * lines something to stand against. Off in light, where the paper does it.
+ */
 :root {
   color-scheme: light;
+  --crew-shell: 0.06;
+  --crew-login: 0.09;
+  --crew-glow: 0;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-canvas: #131412;
+  --color-surface: #1c1d1a;
+  --color-line: #2b2d28;
+  --color-line-strong: #6b6c64;
+  --color-ink: #f1f0ea;
+  --color-ink-soft: #cdccc4;
+  --color-mute: #97968d;
+  --color-brand: #2fc12b;
+  --color-brand-deep: #34a832;
+  --color-sage: #1e2a1e;
+  --color-sage-ink: #8fd48a;
+  --color-claret: #e46b60;
+  --color-ink-hover: #dedcd4;
+  --color-scrim: rgba(0, 0, 0, 0.6);
+  --color-scrim-soft: rgba(0, 0, 0, 0.35);
+  --crew-shell: 0.2;
+  --crew-login: 0.26;
+  --crew-glow: 1;
 }
 
 body {

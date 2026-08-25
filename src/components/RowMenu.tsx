@@ -99,7 +99,7 @@ export function RowMenu({ label, items }: { label: string; items: RowMenuItem[] 
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-mute transition-colors duration-200 ease-quiet hover:bg-black/[0.06] hover:text-ink"
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-mute transition-colors duration-200 ease-quiet hover:bg-ink/[0.06] hover:text-ink"
       >
         <DotsThreeVerticalIcon size={17} weight="bold" aria-hidden="true" />
       </button>
@@ -133,7 +133,7 @@ export function RowMenu({ label, items }: { label: string; items: RowMenuItem[] 
                   className={`flex w-full items-center px-3 py-2 text-left text-[13.5px] transition-colors duration-200 ease-quiet disabled:pointer-events-none disabled:text-mute ${
                     item.tone === "danger"
                       ? "text-claret hover:bg-claret/[0.07]"
-                      : "text-ink-soft hover:bg-black/[0.04] hover:text-ink"
+                      : "text-ink-soft hover:bg-ink/[0.04] hover:text-ink"
                   }`}
                 >
                   {item.label}

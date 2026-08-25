@@ -163,7 +163,7 @@ export default function AdminOverviewPage() {
                 sales.reload()
                 hourly.reload()
               }}
-              className="mt-3 inline-flex h-10 items-center justify-center rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+              className="mt-3 inline-flex h-10 items-center justify-center rounded-lg border border-line-strong px-4 text-[13.5px] font-medium text-ink transition-colors duration-200 ease-quiet hover:bg-ink/[0.03]"
             >
               Try again
             </button>

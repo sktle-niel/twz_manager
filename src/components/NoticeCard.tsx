@@ -87,7 +87,7 @@ export function NoticeCard({
               {n.to ? (
                 <Link
                   to={n.to}
-                  className="block transition-colors duration-200 ease-quiet hover:bg-black/[0.03]"
+                  className="block transition-colors duration-200 ease-quiet hover:bg-ink/[0.03]"
                 >
                   <NoticeBody notice={n} />
                 </Link>

@@ -64,7 +64,7 @@ function DetailView({
       <button
         type="button"
         onClick={onGo}
-        className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-ink text-[14.5px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985]"
+        className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-ink text-[14.5px] font-medium text-canvas transition-[background-color,transform] duration-200 ease-quiet hover:bg-ink-hover active:scale-[0.985]"
       >
         {record.toLabel}
         <ArrowRightIcon size={15} weight="bold" aria-hidden="true" />
@@ -196,7 +196,7 @@ function SearchOverlay({ scope, onClose }: { scope: SearchScope; onClose: () => 
         type="button"
         aria-label="Close search"
         onClick={onClose}
-        className="absolute inset-0 bg-ink/25"
+        className="absolute inset-0 bg-scrim"
       />
 
       <div
@@ -272,7 +272,7 @@ function SearchOverlay({ scope, onClose }: { scope: SearchScope; onClose: () => 
                             onMouseEnter={() => setActive(flat.findIndex((r) => r.id === record.id))}
                             onClick={() => setOpened(record)}
                             className={`flex w-full items-baseline justify-between gap-3 px-5 py-2.5 text-left transition-colors duration-200 ease-quiet ${
-                              isActive ? "bg-black/[0.04]" : ""
+                              isActive ? "bg-ink/[0.04]" : ""
                             }`}
                           >
                             <span className="min-w-0">
