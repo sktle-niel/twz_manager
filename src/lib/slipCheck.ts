@@ -13,10 +13,14 @@
  *
  * Two levels, kept apart on purpose:
  *
- * - `fail` is objective. The file will not decode, the image is too small to
- *   hold readable text, or the exact same photo was already filed against
- *   another deposit. These block the deposit. (One more fail arrives later,
- *   from slipRead: a page carrying none of the BDO slip's wording.)
+ * - `fail` is objective. The file will not decode, or the exact same photo was
+ *   already filed against another deposit. These block the deposit. (One more
+ *   fail arrives later, from slipRead: a page carrying none of the branch's
+ *   bank's own wording.) There is deliberately NO pixel-size floor: a photo
+ *   forwarded through a chat app arrives shrunk, and a 400px short side still
+ *   OCRs fine after the reader's upscale. A frame genuinely too small to
+ *   read fails the wording check on its own — that is the test that matters,
+ *   not the dimensions.
  * - `warn` is a heuristic — focus, contrast, whether the frame looks like paper
  *   at all, how old the file is. These are wrong often enough that refusing an
  *   upload over one would strand a manager at 9pm with a readable slip, so they
@@ -27,7 +31,7 @@ import { shortDate } from "./format"
 export type SlipLevel = "ok" | "warn" | "fail"
 
 export type SlipFinding = {
-  id: "file" | "size" | "duplicate" | "document" | "focus" | "age" | "bank"
+  id: "file" | "duplicate" | "document" | "focus" | "age" | "bank"
   level: Exclude<SlipLevel, "ok">
   title: string
   detail: string
@@ -47,8 +51,6 @@ export type SlipReport = {
    which deposit the photo was used for. */
 export type KnownSlip = { sha: string; phash: string; label: string }
 
-/* Below this a phone photo cannot hold legible slip text at any focus */
-const MIN_EDGE = 480
 /* Centre crop for the focus measure, sampled at native scale */
 const FOCUS_CROP = 640
 
@@ -321,14 +323,6 @@ export async function inspectSlip(
   const w = img.naturalWidth
   const h = img.naturalHeight
   const size = `${w}×${h}`
-
-  if (Math.min(w, h) < MIN_EDGE) {
-    return fail(
-      "size",
-      `Too small to read (${size})`,
-      `A ${paper} needs at least ${MIN_EDGE} pixels on its short side. Take the photo again rather than cropping one down.`,
-    )
-  }
 
   const sha = await sha256(file)
   const phash = dHash(img)
