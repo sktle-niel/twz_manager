@@ -18,6 +18,7 @@
 import type {
   AdvanceItem,
   AdvancePatch,
+  Bank,
   DailySales,
   FailedSignInEvent,
   ItemSales,
@@ -88,6 +89,12 @@ export type TwzApi = {
   /* ---- branches and accounts ---- */
 
   stores(): Promise<Store[]>
+  /**
+   * Which bank a branch deposits to. Owner only. Drives the slip check on that
+   * branch's Deposits page — the photo must read as that bank's own form.
+   * Rejects 422 with `fields.bank` on a bank the app does not know.
+   */
+  setStoreBank(storeId: string, bank: Bank): Promise<Store[]>
   managers(): Promise<Manager[]>
   /**
    * Issues a branch account. With no email anywhere in the system the owner

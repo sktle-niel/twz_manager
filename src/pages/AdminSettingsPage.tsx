@@ -1,6 +1,7 @@
 import { useState } from "react"
 import type { ReactNode, SubmitEvent } from "react"
 import {
+  BankIcon,
   CheckCircleIcon,
   DownloadSimpleIcon,
   KeyIcon,
@@ -16,10 +17,11 @@ import type { Icon } from "@phosphor-icons/react"
 import { ApiError, api } from "../lib/api"
 import { Loading } from "../components/Loading"
 import { timeAgo } from "../lib/format"
-import type { ExpenseCategoryConfig } from "../lib/api"
+import type { Bank, ExpenseCategoryConfig, Store } from "../lib/api"
+import { BANKS, BANK_IDS, isBank, storeBank } from "../lib/banks"
 import { useApi } from "../lib/useApi"
-import { useOwnerSession } from "../lib/session"
-import { FormField, inputBad, inputBase, inputFlush, inputOk } from "../components/ui"
+import { useAuth, useOwnerSession } from "../lib/session"
+import { FilterSelect, FormField, inputBad, inputBase, inputFlush, inputOk } from "../components/ui"
 import { RowMenu } from "../components/RowMenu"
 import { savePinAsImage, savePinAsPdf } from "../lib/pinCard"
 import { useToast } from "../lib/toast"
@@ -320,9 +322,41 @@ function RecoveryPinCard() {
   )
 }
 
+/* The owner picks from these. The short name is the label — the full one
+   does not fit a row-sized trigger — and the hint carries the rest: the full
+   name and what paper the bank hands back */
+const BANK_OPTIONS = BANK_IDS.map((id) => ({
+  value: id,
+  label: BANKS[id].short,
+  hint: `${BANKS[id].name} · ${BANKS[id].paper}`,
+}))
+
 export default function AdminSettingsPage() {
   const { showToast } = useToast()
   const { stores } = useOwnerSession()
+  const { applyStores } = useAuth()
+
+  /*
+   * Which bank each branch deposits to. One branch banks at BPI while the
+   * rest use BDO, and the manager's slip check reads for the chosen bank's
+   * own form — so this is set here, per branch, rather than assumed. The
+   * branch list lives in the session, so the saved list is adopted there
+   * and every page sees the change at once.
+   */
+  const [bankSaving, setBankSaving] = useState<string | null>(null)
+  async function changeBank(store: Store, value: string) {
+    if (!isBank(value) || storeBank(store) === value) return
+    const bank: Bank = value
+    setBankSaving(store.id)
+    try {
+      applyStores(await api.setStoreBank(store.id, bank))
+      showToast(`${store.name} now deposits to ${BANKS[bank].name}.`)
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "The bank did not save. Try again.")
+    } finally {
+      setBankSaving(null)
+    }
+  }
 
   const loadedCategories = useApi(() => api.expenseCategories(), [])
   const pos = useApi(() => api.posConnection(), [])
@@ -451,19 +485,42 @@ export default function AdminSettingsPage() {
         <SettingCard
         icon={StorefrontIcon}
         title="Branches"
-        subtitle="Stores audited in TWZ Manager. Sales are pulled from Loyverse per branch."
+        subtitle="Stores audited in TWZ Manager, and the bank each one deposits to."
       >
         <ul className="divide-y divide-line rounded-lg border border-line">
           {stores.map((s) => (
-            <li key={s.id} className="flex items-center justify-between px-4 py-2.5">
-              <span className="text-[14px] font-medium text-ink-soft">{s.name}</span>
-              <span className="inline-flex items-center gap-1 text-[12px] text-mute">
-                <CheckCircleIcon size={13} weight="fill" className="text-sage-ink" aria-hidden="true" />
-                Loyverse-linked
+            /* Two lines on a phone, one on wider screens — the same rule as
+               the Managers rows: the name owns its line in full and the
+               select wraps under it rather than squeezing it to a sliver */
+            <li key={s.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-[14px] font-medium text-ink-soft">{s.name}</span>
+                <span className="inline-flex items-center gap-1 text-[12px] text-mute">
+                  <CheckCircleIcon size={13} weight="fill" className="text-sage-ink" aria-hidden="true" />
+                  Loyverse-linked
+                </span>
               </span>
+              {/* Per branch, because the slip check on that branch's Deposits
+                  page reads for this bank's form and refuses the other's.
+                  Every row waits while one saves: two saves in flight would
+                  race to replace the whole list with the older answer. */}
+              <FilterSelect
+                ariaLabel={`Bank for ${s.name}`}
+                icon={<BankIcon size={15} weight="bold" aria-hidden="true" />}
+                value={storeBank(s)}
+                onChange={(value) => void changeBank(s, value)}
+                options={BANK_OPTIONS}
+                disabled={bankSaving !== null}
+                className="w-full sm:w-32 sm:flex-none"
+              />
             </li>
           ))}
         </ul>
+        <p className="mt-2 text-[12.5px] text-mute">
+          Sales are pulled from Loyverse per branch. The bank decides which paper the manager's
+          deposit-slip check looks for — BDO's transaction slip or BPI's deposit receipt — and the
+          other bank's is refused.
+        </p>
       </SettingCard>
 
       {/* Loyverse POS integration */}

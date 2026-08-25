@@ -60,6 +60,27 @@ const NETWORK_EVENT = "twz:network"
 /* A read slower than this is worth saying out loud, even when it succeeds */
 const SLOW_READ_MS = 4500
 
+/*
+ * What the transfer itself cost, from Resource Timing — not the wall clock.
+ *
+ * Wrapping performance.now() around a fetch measures elapsed real time, and on
+ * a phone that includes the main thread being busy: parsing a megabyte of
+ * JavaScript, drawing the chart, hydrating a long list. The response arrives in
+ * 200 ms but the await cannot resume until the thread frees up, so the app was
+ * reporting its own render cost as the branch's internet being slow. The origin
+ * answers in 44 ms; the connection was never the problem.
+ *
+ * Null when the browser has no entry for it — better to stay quiet than to
+ * blame a connection we cannot measure.
+ */
+function transferMs(url: string, notBefore: number): number | null {
+  if (typeof performance.getEntriesByName !== "function") return null
+  const entries = performance.getEntriesByName(new URL(url, location.origin).href, "resource")
+  const last = entries[entries.length - 1] as PerformanceResourceTiming | undefined
+  if (!last || last.startTime < notBefore) return null
+  return last.duration
+}
+
 function signal(kind: NetworkSignal): void {
   window.dispatchEvent(new CustomEvent<NetworkSignal>(NETWORK_EVENT, { detail: kind }))
 }
@@ -114,8 +135,11 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs = READ
     throw new ApiError(0, "No connection. Check the branch's internet and try again.")
   }
 
-  // Made it, but slowly — the person waiting deserves to know why
-  if (performance.now() - startedAt > SLOW_READ_MS) signal("slow")
+  /* Made it, but slowly — and only if the WIRE was slow. A request that spent
+     four seconds waiting behind a busy main thread is this app's problem to
+     fix, not something to hand the manager as "check your internet". */
+  const spent = transferMs(`${BASE}${path}`, startedAt)
+  if (spent !== null && spent > SLOW_READ_MS) signal("slow")
 
   const body = await parse(res)
   if (!res.ok) {

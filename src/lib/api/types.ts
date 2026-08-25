@@ -19,9 +19,18 @@
 /** `YYYY-MM-DD`, in the branch's own timezone */
 export type DayKey = string
 
+/**
+ * Where a branch banks its takings. Each bank prints its own form — BDO a
+ * transaction slip, BPI a deposit/payment receipt — and the slip check reads
+ * for the wording of the one the branch actually uses.
+ */
+export type Bank = "bdo" | "bpi"
+
 export type Store = {
   id: string
   name: string
+  /** Absent reads as "bdo" — every branch banked there before this was stored */
+  bank?: Bank
 }
 
 /*

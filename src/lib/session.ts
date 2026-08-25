@@ -30,6 +30,8 @@ export type Auth = {
   signOut: () => Promise<void>
   /** Adopt a session the API just returned, e.g. after a profile update */
   applySession: (session: Session) => void
+  /** Adopt the branch list the API just returned, e.g. after a bank change */
+  applyStores: (stores: Store[]) => void
 }
 
 export const AuthContext = createContext<Auth | null>(null)

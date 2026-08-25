@@ -83,56 +83,29 @@ export default function SalesPage() {
         <section className="mt-5 rounded-xl border border-line bg-surface p-5" data-rise>
           <Loading label="Loading sales" />
         </section>
-      ) : data === null ? null : (
+      ) : data === null ? null : nothing ? (
+        <section className="mt-4 rounded-xl border border-line bg-surface p-5" data-rise>
+          <p className="py-10 text-center text-[14px] text-mute">
+            Nothing sold in {rangeLabel(range, today)}.
+          </p>
+        </section>
+      ) : (
+        /* No summary tiles above these: each table already ends in its own
+           Total, and repeating the same two figures at the top of a phone
+           screen pushed the actual items below the fold. */
         <>
-          {/* The two totals, side by side, because the whole point of the page
-              is that they are different kinds of money */}
-          <section className="mt-5 grid gap-3 sm:grid-cols-2" data-rise>
-            <div className="rounded-xl border border-line bg-surface p-5">
-              <h2 className="text-[13px] font-medium text-mute">Net sales</h2>
-              <p className="mt-1 text-[26px] font-semibold tracking-[-0.01em] text-ink tabular-nums">
-                {peso.format(data.partsTotal)}
-              </p>
-              <p className="mt-1 text-[12px] text-mute">
-                Goods sold — this is what the deposit answers for.
-              </p>
-            </div>
-            <div className="rounded-xl border border-line bg-surface p-5">
-              <h2 className="text-[13px] font-medium text-mute">Labor &amp; services</h2>
-              <p className="mt-1 text-[26px] font-semibold tracking-[-0.01em] text-ink tabular-nums">
-                {peso.format(data.laborTotal)}
-              </p>
-              <p className="mt-1 text-[12px] text-mute">
-                Money taken, but never counted toward net sales.
-              </p>
-            </div>
-          </section>
-
-          {nothing ? (
-            <section
-              className="mt-4 rounded-xl border border-line bg-surface p-5"
-              data-rise
-            >
-              <p className="py-10 text-center text-[14px] text-mute">
-                Nothing sold in {rangeLabel(range, today)}.
-              </p>
-            </section>
-          ) : (
-            <>
-              <ItemTable
-                title="Sold"
-                subtitle="Counted toward net sales"
-                items={data.parts}
-                total={data.partsTotal}
-              />
-              <ItemTable
-                title="Labor & services"
-                subtitle="Not counted toward net sales"
-                items={data.labor}
-                total={data.laborTotal}
-              />
-            </>
-          )}
+          <ItemTable
+            title="Sold"
+            subtitle="Counted toward net sales"
+            items={data.parts}
+            total={data.partsTotal}
+          />
+          <ItemTable
+            title="Labor & services"
+            subtitle="Not counted toward net sales"
+            items={data.labor}
+            total={data.laborTotal}
+          />
         </>
       )}
     </>
