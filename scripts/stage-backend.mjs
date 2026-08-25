@@ -12,9 +12,10 @@ import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, renameSync } from "
 import { join, resolve } from "node:path"
 
 const FRONTEND = resolve(import.meta.dirname, "..")
+/* Sibling of the frontend repo: `website project/API/deposit_api` beside
+   `website project/frontend/deposit_app` */
 const BACKEND =
-  process.env.BACKEND_DIR ??
-  resolve(FRONTEND, "..", "..", "backend projects", "twowheelszone-manager-api")
+  process.env.BACKEND_DIR ?? resolve(FRONTEND, "..", "..", "API", "deposit_api")
 
 const dist = join(FRONTEND, "dist")
 const target = join(BACKEND, "public")

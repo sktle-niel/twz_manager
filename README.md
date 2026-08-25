@@ -33,9 +33,10 @@ Expected deposit  =  Loyverse POS sales for the day  −  approved expenses
 1. **Sales** flow in from the POS and are tracked through the day, per branch.
 2. **Expenses** are logged as they happen. Meals and merienda are company-covered and go in
    without a receipt; every other category needs one. Both are deducted automatically.
-3. **Deposits** are recorded with the amount, a reference, and a photo of the slip. A deposit is
-   not always daily — a branch can batch up to ~3 days, so one deposit can cover several audited
-   days, and the manager picks which.
+3. **Deposits** are recorded with the amount and a photo of the bank's slip — BDO's transaction
+   slip for most branches, BPI's deposit receipt for the one that banks there; the photo is read
+   and must carry that bank's own wording. A deposit is not always daily — a branch can batch up
+   to ~3 days, so one deposit can cover several audited days, and the manager picks which.
 4. **Reconciliation** compares the deposit against the sum expected for the days it covers. A
    match closes them. A mismatch cannot be closed silently: the app requires a discrepancy form
    with a reason and a receipt.
@@ -49,7 +50,7 @@ choice in the UI.
 |---|---|
 | `/` | Gross sales chart, per-day summary, and a status rail of what needs acting on today |
 | `/expenses` | Batch expense entry, back-dating to any day still awaiting a deposit, per-row edit and delete |
-| `/deposits` | Every audited day not yet covered, live match check, deposit slip upload |
+| `/deposits` | Every audited day not yet covered, live match check, deposit slip upload checked against the branch's bank |
 | `/history` | Day-by-day audit table with status and the deposit receipt |
 | `/account` | Profile, password, sign out, and the sign-in log (device, IP, when) |
 
@@ -60,7 +61,7 @@ choice in the UI.
 | `/admin` | Sales chart and table across branches, plus a highest-first branch ranking |
 | `/admin/history` | The same audit table with a branch column |
 | `/admin/managers` | Issue and reassign branch-manager accounts (one branch each) |
-| `/admin/settings` | Branches, POS connection, expense categories, reconciliation rules |
+| `/admin/settings` | Branches and the bank each deposits to (BDO or BPI), POS connection, expense categories, reconciliation rules |
 | `/admin/account` | Owner profile, password, sign out, and the sign-in log |
 
 ## Running it

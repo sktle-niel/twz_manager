@@ -70,6 +70,7 @@ export const httpApi: TwzApi = {
     send<void>("PUT", "/account/password", { current, next }),
 
   stores: () => get<Store[]>("/stores"),
+  setStoreBank: (storeId, bank) => send<Store[]>("PATCH", `/stores/${storeId}`, { bank }),
   managers: () => get<Manager[]>("/managers"),
   issueManager: (input) => send<Manager>("POST", "/managers", input),
   assignBranch: (managerId, storeId) =>

@@ -90,6 +90,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  /* The branch list is resolved once at boot, so an owner's edit to it (a
+     branch's bank) is adopted here rather than left stale until the next
+     sign-in — every page reads the list through this context */
+  const applyStores = useCallback((stores: Store[]) => {
+    setState((prev) =>
+      prev.status === "manager" || prev.status === "owner" ? { ...prev, stores } : prev,
+    )
+  }, [])
+
   const value = useMemo(() => {
     const status: AuthStatus = state.status
     const session = state.status === "manager" || state.status === "owner" ? state.session : null
@@ -101,8 +110,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signIn,
       signOut,
       applySession,
+      applyStores,
     }
-  }, [state, signIn, signOut, applySession])
+  }, [state, signIn, signOut, applySession, applyStores])
 
   if (bootError) {
     return (

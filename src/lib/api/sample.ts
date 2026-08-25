@@ -33,6 +33,7 @@ import {
   signWord,
   tokensHit,
 } from "../search"
+import { isBank } from "../banks"
 import { ApiError } from "./client"
 import type { DayRange, Session, TwzApi } from "./contracts"
 import type {
@@ -72,11 +73,13 @@ const SAMPLE_PHOTO =
 
 /* ---- fixtures ---- */
 
+/* Every branch banks at BDO until the owner says otherwise in Settings —
+   the rows are replaced in place by setStoreBank, like a server would */
 const STORES: Store[] = [
-  { id: "arevalo", name: "Arevalo" },
-  { id: "molo", name: "Molo" },
-  { id: "jaro", name: "Jaro" },
-  { id: "lapaz", name: "La Paz" },
+  { id: "arevalo", name: "Arevalo", bank: "bdo" },
+  { id: "molo", name: "Molo", bank: "bdo" },
+  { id: "jaro", name: "Jaro", bank: "bdo" },
+  { id: "lapaz", name: "La Paz", bank: "bdo" },
 ]
 
 /* avatarKind is seed data the account holder can change on the Account page;
@@ -697,7 +700,16 @@ export const sampleApi: TwzApi = {
     return settle(undefined)
   },
 
-  stores: () => settle(STORES),
+  stores: () => settle(STORES.map((s) => ({ ...s }))),
+  setStoreBank: (storeId, bank) => {
+    if (!isBank(bank)) {
+      return fail(422, "Check the highlighted fields.", { bank: "Pick BDO or BPI." })
+    }
+    const at = STORES.findIndex((s) => s.id === storeId)
+    if (at < 0) return fail(404, "That branch no longer exists.")
+    STORES[at] = { ...STORES[at], bank }
+    return settle(STORES.map((s) => ({ ...s })))
+  },
   managers: () => settle([...managers]),
 
   issueManager: (input) => {

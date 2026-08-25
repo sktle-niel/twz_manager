@@ -159,7 +159,22 @@ brings the `.env` value back.
 Everything else here is owner-only: enforce `403` for managers.
 
 ### `GET /stores`
-**200** `Store[]`.
+**200** `Store[]` — `{ id, name, bank }`. `bank` is `"bdo"` or `"bpi"`: which
+bank the branch deposits to. Most branches bank at BDO Network Bank and file
+its cash transaction slip; one deposits to BPI, whose teller hands back a
+deposit/payment receipt. The manager's Deposits page reads this to decide
+which bank's form the slip photo must carry — the other bank's is refused
+client-side. Default `"bdo"` for every existing row; a missing field is read
+as `"bdo"` by the client, so the column can land without a backfill.
+
+### `PATCH /stores/{storeId}`
+Body `{ bank: "bdo" | "bpi" }`. Owner only. Sets the branch's bank.
+**200** the full updated `Store[]`. **422** `fields.bank` on any other value.
+**404** when the branch is gone.
+
+Nothing about a deposit changes on the wire: `POST /deposits` carries no
+bank, because the branch's bank is the store's own fact and the slip check
+that enforces it runs in the browser before the upload.
 
 ### `GET /managers`
 **200** `Manager[]`.

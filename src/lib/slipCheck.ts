@@ -299,9 +299,12 @@ export async function inspectSlip(
   file: File,
   known: KnownSlip[],
   now: Date,
+  /* What the branch's bank calls its paper — "transaction slip" at BDO,
+     "deposit receipt" at BPI — so every finding names what is in hand */
+  paper = "deposit slip",
 ): Promise<SlipReport> {
   if (!file.type.startsWith("image/")) {
-    return fail("file", "That file is not an image", "Attach a photo of the deposit slip.")
+    return fail("file", "That file is not an image", `Attach a photo of the ${paper}.`)
   }
 
   let img: HTMLImageElement
@@ -323,7 +326,7 @@ export async function inspectSlip(
     return fail(
       "size",
       `Too small to read (${size})`,
-      `A slip needs at least ${MIN_EDGE} pixels on its short side. Take the photo again rather than cropping one down.`,
+      `A ${paper} needs at least ${MIN_EDGE} pixels on its short side. Take the photo again rather than cropping one down.`,
     )
   }
 
@@ -342,7 +345,7 @@ export async function inspectSlip(
           id: "duplicate",
           level: "fail",
           title: "This exact photo was already used",
-          detail: `It was filed with deposit ${same.label}. Photograph the new slip.`,
+          detail: `It was filed with deposit ${same.label}. Photograph the new ${paper}.`,
         },
       ],
       sha,
@@ -354,8 +357,8 @@ export async function inspectSlip(
     findings.push({
       id: "duplicate",
       level: "warn",
-      title: "This looks like a slip already filed",
-      detail: `Nearly identical to the photo used for deposit ${near.label}. Check it is not the same slip.`,
+      title: `This looks like a ${paper} already filed`,
+      detail: `Nearly identical to the photo used for deposit ${near.label}. Check it is not the same ${paper}.`,
     })
   }
 
@@ -374,22 +377,21 @@ export async function inspectSlip(
       findings.push({
         id: "document",
         level: "fail",
-        title: "This is not a photo of a deposit slip",
+        title: `This is not a photo of a ${paper}`,
         detail:
           metrics.ink < 0.004
-            ? "No printing found in the frame. Photograph the slip itself, filling the frame on a plain surface."
-            : "No sheet of paper with printed lines found. Photograph the slip itself, filling the frame on a plain surface.",
+            ? `No printing found in the frame. Photograph the ${paper} itself, filling the frame on a plain surface.`
+            : `No sheet of paper with printed lines found. Photograph the ${paper} itself, filling the frame on a plain surface.`,
       })
-      return { level: "fail", headline: "This is not a photo of a deposit slip", findings, sha, phash }
+      return { level: "fail", headline: `This is not a photo of a ${paper}`, findings, sha, phash }
     }
 
     if (verdict === "poor") {
       findings.push({
         id: "document",
         level: "warn",
-        title: "The slip is hard to make out",
-        detail:
-          "Little of the frame is the slip, or its lines are faint. Move closer, on a plain surface, in even light.",
+        title: `The ${paper} is hard to make out`,
+        detail: `Little of the frame is the ${paper}, or its lines are faint. Move closer, on a plain surface, in even light.`,
       })
     }
   }
@@ -433,7 +435,7 @@ export async function inspectSlip(
         id: "focus",
         level: "warn",
         title: "The photo looks washed out",
-        detail: "Almost no light or shade in the frame. Avoid glare and shadow across the slip.",
+        detail: `Almost no light or shade in the frame. Avoid glare and shadow across the ${paper}.`,
       })
     } else if (sharpness < BLURRY_UNDER) {
       findings.push({
@@ -460,7 +462,7 @@ export async function inspectSlip(
         id: "age",
         level: "warn",
         title: `This photo is ${days} days old`,
-        detail: `Saved ${shortDate(new Date(stamped))}. Make sure it is the slip for this deposit.`,
+        detail: `Saved ${shortDate(new Date(stamped))}. Make sure it is the ${paper} for this deposit.`,
       })
     }
   }
@@ -474,7 +476,7 @@ export async function inspectSlip(
   return {
     level: worst,
     headline:
-      worst === "ok" ? `The slip looks valid: ${size}, in focus.` : "Check the photo before recording",
+      worst === "ok" ? `The ${paper} looks valid: ${size}, in focus.` : "Check the photo before recording",
     findings,
     sha,
     phash,

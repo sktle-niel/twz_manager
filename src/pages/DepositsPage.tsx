@@ -25,8 +25,9 @@ import { SlipCamera } from "../components/SlipCamera"
 import type { ReceiptEntry } from "../lib/receipts"
 import { inspectSlip } from "../lib/slipCheck"
 import type { KnownSlip, SlipReport } from "../lib/slipCheck"
-import { foldBank, readSlip } from "../lib/slipRead"
-import { useManagerSession } from "../lib/session"
+import { foldBank, readSlip, slipAccepted } from "../lib/slipRead"
+import { BANKS, storeBank } from "../lib/banks"
+import { useAuth, useManagerSession } from "../lib/session"
 import { useToast } from "../lib/toast"
 
 type FieldErrors = {
@@ -114,7 +115,23 @@ function depositOver(dep: { amount: number; online: number; expected: number | n
 export default function DepositsPage() {
   const { store } = useManagerSession()
   const { showToast } = useToast()
+  const { applyStores } = useAuth()
   const storeId = store.id
+  /* Which bank this branch deposits to, set by the owner. The slip check
+     reads for that bank's own form, so a BPI branch files BPI's deposit
+     receipt and a BDO slip in its place is refused, not waved through.
+     The session's branch list was resolved at boot, and the owner may have
+     moved this branch since — a manager who keeps the app open for days
+     would be refused their own bank's receipt and sent to a setting the
+     owner already changed. So the list is re-asked here, on mount and on
+     every return to the app, and adopted into the session so the whole app
+     agrees on it. */
+  const freshStores = useApi(() => api.stores(), [])
+  useEffect(() => {
+    if (freshStores.data) applyStores(freshStores.data)
+  }, [freshStores.data, applyStores])
+  const bank = storeBank(freshStores.data?.find((s) => s.id === storeId) ?? store)
+  const bankInfo = BANKS[bank]
   const [checkedDays, setCheckedDays] = useState<Record<string, boolean>>({})
   const [amount, setAmount] = useState("")
   /* GCash / bank-transfer money for the covered days — sales that never
@@ -260,7 +277,7 @@ export default function DepositsPage() {
     setSlipReport(null)
     setReading(false)
 
-    inspectSlip(slip, knownSlips, new Date()).then((report) => {
+    inspectSlip(slip, knownSlips, new Date(), BANKS[bank].paper).then((report) => {
       if (cancelled) return
       setSlipReport(report)
       if (report.level === "fail") return
@@ -270,13 +287,14 @@ export default function DepositsPage() {
         if (cancelled) return
         setReading(false)
         /* What the words said, folded into the verdict on the photo — a page
-           with none of the BDO slip's wording on it cannot be filed */
-        setSlipReport((r) => (r ? foldBank(r, fields) : r))
+           with none of the bank's wording on it, or plainly the other bank's
+           form, cannot be filed */
+        setSlipReport((r) => (r ? foldBank(r, fields, bank) : r))
 
         const filled = { amount: false, date: false }
-        /* Figures off a page that is not the slip are not offered — a grocery
-           total landing in the amount field would be worse than nothing */
-        if (fields.bank.kind !== "other") {
+        /* Figures off a page that is not this bank's slip are not offered — a
+           grocery total landing in the amount field would be worse than nothing */
+        if (slipAccepted(fields, bank)) {
           /* Never write over something the manager already typed — a misread
              figure replacing a correct one is the one outcome worth avoiding */
           if (fields.amount !== null && typed.current.amount.trim() === "") {
@@ -295,7 +313,7 @@ export default function DepositsPage() {
     return () => {
       cancelled = true
     }
-  }, [slip, knownSlips, defaultDate])
+  }, [slip, knownSlips, defaultDate, bank])
 
   /* The photo is still being inspected or read. Recording waits: the words
      on the page are part of the verdict now, and a submit that outruns them
@@ -317,14 +335,15 @@ export default function DepositsPage() {
         batchWindowDays === 1 ? "day" : "days"
       }. Unselect ${overWindow} ${overWindow === 1 ? "day" : "days"}, or record more than one deposit.`
 
-    if (!slip) next.slip = "The deposit slip photo is required."
+    if (!slip) next.slip = `The ${bankInfo.short} ${bankInfo.paper} photo is required.`
     /* The checks are the gate now, so recording waits for them to finish */
     else if (checking) next.slip = "Still checking the photo. Give it a moment."
     /* Only the near-objective findings block — a file that will not decode, an
        image too small to read, a photo already filed against another deposit,
-       a page with none of the BDO slip's wording on it. The heuristics warn
-       and go through: being locked out of filing a deposit over a wrong focus
-       reading is worse than a slip the owner asks again for. */
+       a page with none of the bank's wording on it or plainly the other
+       bank's form. The heuristics warn and go through: being locked out of
+       filing a deposit over a wrong focus reading is worse than a slip the
+       owner asks again for. */
     else if (slipReport?.level === "fail") next.slip = slipReport.headline
 
     if (mismatchCents !== 0 && reason.trim().length < REASON_MIN) {
@@ -601,12 +620,18 @@ export default function DepositsPage() {
             data-rise
           >
         <h2 className="text-[15px] font-semibold text-ink">Record a deposit</h2>
+        {/* Said up front, because the photo check will hold the slip to it:
+            the owner set this branch's bank, and the other bank's paper is
+            refused rather than quietly accepted */}
+        <p className="mt-0.5 text-[13px] text-mute">
+          {store.name} deposits to {bankInfo.name}. Attach its {bankInfo.paper}.
+        </p>
         <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField
               id="deposit-amount"
               label="Amount deposited"
-              hint={fromSlip.amount ? "Read from the slip. Check it." : undefined}
+              hint={fromSlip.amount ? `Read from the ${bankInfo.paper}. Check it.` : undefined}
               error={errors.amount}
             >
               <div className="relative">
@@ -665,7 +690,7 @@ export default function DepositsPage() {
             <FormField
               id="deposit-date"
               label="Deposit date"
-              hint={fromSlip.date ? "Read from the slip." : undefined}
+              hint={fromSlip.date ? `Read from the ${bankInfo.paper}.` : undefined}
               error={errors.date}
             >
               <input
@@ -755,7 +780,7 @@ export default function DepositsPage() {
           <div>
             <PhotoAttach
               id="deposit-slip"
-              label="Deposit slip photo"
+              label={`${bankInfo.short} ${bankInfo.paper} photo`}
               hint="Shooting it here guides the framing as you go."
               file={slip}
               onChange={(f) => setSlip(f)}
@@ -815,7 +840,7 @@ export default function DepositsPage() {
 
                 {/* The reading itself stays invisible: figures it finds land
                     straight in the fields (marked "Read from the slip"), and
-                    the words it finds feed the BDO verdict above. A panel of
+                    the words it finds feed the bank verdict above. A panel of
                     raw OCR guesses only demanded explaining. */}
                 {reading && (
                   <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-mute">
@@ -916,7 +941,7 @@ export default function DepositsPage() {
               disabled={saving || checking}
               className="flex h-11 items-center justify-center rounded-lg bg-ink px-6 text-[15px] font-medium text-white transition-[background-color,transform] duration-200 ease-quiet hover:bg-[#2e2f2b] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-60"
             >
-              {saving ? "Recording" : checking ? "Checking the slip" : "Record deposit"}
+              {saving ? "Recording" : checking ? `Checking the ${bankInfo.paper}` : "Record deposit"}
             </button>
           </div>
         </form>
@@ -969,6 +994,7 @@ export default function DepositsPage() {
 
       {cameraOpen && (
         <SlipCamera
+          bank={bank}
           onCapture={(file) => {
             setCameraOpen(false)
             setSlip(file)

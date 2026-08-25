@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { CameraIcon, ImageSquareIcon, XIcon } from "@phosphor-icons/react"
+import type { Bank } from "../lib/api"
+import { BANKS } from "../lib/banks"
 import { documentMetrics, documentVerdict } from "../lib/slipCheck"
 
 /*
@@ -21,18 +23,25 @@ const GUIDE_SIZE = 128
 
 type Guide = { tone: "ok" | "busy"; text: string }
 
-const GUIDES: Record<string, Guide> = {
-  none: { tone: "busy", text: "Point the camera at the deposit slip" },
-  closer: { tone: "busy", text: "Fill the frame with the slip" },
-  faint: { tone: "busy", text: "Get closer so the printing shows" },
-  ready: { tone: "ok", text: "Looks good, hold steady" },
+/* Worded for the paper this branch's bank hands back — "slip" to a BDO
+   branch, "receipt" to the BPI one — so the guide names what is in hand */
+function guidesFor(paper: string): Record<"none" | "closer" | "faint" | "ready", Guide> {
+  return {
+    none: { tone: "busy", text: `Point the camera at the ${paper}` },
+    closer: { tone: "busy", text: `Fill the frame with the ${paper}` },
+    faint: { tone: "busy", text: "Get closer so the printing shows" },
+    ready: { tone: "ok", text: "Looks good, hold steady" },
+  }
 }
 
 export function SlipCamera({
+  bank,
   onCapture,
   onPickFile,
   onClose,
 }: {
+  /* Which bank's paper is being shot: sets the frame's shape and the words */
+  bank: Bank
   onCapture: (file: File) => void
   onPickFile: () => void
   onClose: () => void
@@ -40,6 +49,8 @@ export function SlipCamera({
   const videoRef = useRef<HTMLVideoElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [live, setLive] = useState(false)
+  const paper = BANKS[bank]
+  const GUIDES = guidesFor(paper.paper)
   const [guide, setGuide] = useState<Guide>(GUIDES.none)
 
   useEffect(() => {
@@ -132,7 +143,9 @@ export function SlipCamera({
     }, GUIDE_MS)
 
     return () => window.clearInterval(timer)
-  }, [live])
+    // GUIDES is rebuilt per render from `bank`, which is what the guide text hangs on
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, bank])
 
   function shoot() {
     const video = videoRef.current
@@ -163,7 +176,7 @@ export function SlipCamera({
       className="fixed inset-0 z-50 flex flex-col bg-ink"
       role="dialog"
       aria-modal="true"
-      aria-label="Take a photo of the deposit slip"
+      aria-label={`Take a photo of the ${paper.short} ${paper.paper}`}
     >
       <div className="flex items-center justify-between px-2 pt-[calc(0.5rem+env(safe-area-inset-top))]">
         <button
@@ -174,11 +187,15 @@ export function SlipCamera({
         >
           <XIcon size={22} weight="bold" aria-hidden="true" />
         </button>
-        <span className="text-[13.5px] font-medium text-white/80">Deposit slip</span>
+        <span className="text-[13.5px] font-medium text-white/80">
+          {paper.short} {paper.paper}
+        </span>
         <span className="h-11 w-11" aria-hidden="true" />
       </div>
 
-      <div className="relative min-h-0 flex-1">
+      {/* A size container, so the frame guide below can be measured against
+          the preview itself rather than the viewport */}
+      <div className="relative min-h-0 flex-1 [container-type:size]">
         {error ? (
           <div className="flex h-full items-center justify-center px-8">
             <p className="max-w-sm text-center text-[14px] leading-[1.6] text-white/80">{error}</p>
@@ -192,13 +209,23 @@ export function SlipCamera({
               className="h-full w-full object-cover"
               aria-label="Camera preview"
             />
-            {/* Where to put the slip. Aspect roughly that of a deposit slip. */}
+            {/* Where to put the paper: a wide frame for BDO's slip, a tall one
+                for BPI's receipt strip. Width-led, but capped in container
+                units so the frame's height never runs past the preview — a
+                landscape phone included, where the preview is a short band
+                between the header and the shutter. */}
             <div
               aria-hidden="true"
-              className={`pointer-events-none absolute inset-x-6 top-1/2 aspect-[4/3] -translate-y-1/2 rounded-xl border-2 transition-colors duration-300 ease-quiet ${
-                guide.tone === "ok" ? "border-brand" : "border-white/45"
-              }`}
-            />
+              className="pointer-events-none absolute inset-0 flex items-center justify-center p-6"
+            >
+              <div
+                className={`w-full rounded-xl border-2 transition-colors duration-300 ease-quiet ${
+                  paper.portrait
+                    ? "aspect-[3/4] max-w-[calc((100cqh-3rem)*3/4)]"
+                    : "aspect-[4/3] max-w-[calc((100cqh-3rem)*4/3)]"
+                } ${guide.tone === "ok" ? "border-brand" : "border-white/45"}`}
+              />
+            </div>
             <p
               role="status"
               className={`absolute inset-x-0 bottom-4 mx-auto w-fit rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-300 ease-quiet ${
